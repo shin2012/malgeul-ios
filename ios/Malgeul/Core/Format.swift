@@ -68,7 +68,7 @@ enum Fmt {
 
 extension ShapeStyle where Self == Color {
     /// 웹과 같은 강조색 #D4622A
-    static var accentJulglo: Color { Color(red: 0xD4 / 255, green: 0x62 / 255, blue: 0x2A / 255) }
+    static var accentMalgeul: Color { Color(red: 0xD4 / 255, green: 0x62 / 255, blue: 0x2A / 255) }
 }
 
 extension Color {

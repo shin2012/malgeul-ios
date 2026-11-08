@@ -75,7 +75,7 @@ struct MeetingListView: View {
 
     private var main: some View {
         state
-            .navigationTitle("줄글로")
+            .navigationTitle("말글")
             .toolbar { toolbar }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio, .movie, .mpeg4Movie, .mpeg4Audio],
                           allowsMultipleSelection: true) { result in
@@ -448,7 +448,7 @@ struct UploadJobRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: job.state == .failed ? "exclamationmark.triangle.fill" : "arrow.up.circle")
-                    .foregroundStyle(job.state == .failed ? Color.red : Color.accentJulglo)
+                    .foregroundStyle(job.state == .failed ? Color.red : Color.accentMalgeul)
                 Text(job.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer()
                 if job.viaTailscale {
@@ -457,7 +457,7 @@ struct UploadJobRow: View {
                         .accessibilityLabel("Tailscale 직통")
                 }
                 if job.state == .uploading {
-                    Text("\(Int(job.progress * 100))%").font(.subheadline.weight(.bold)).monospacedDigit().foregroundStyle(.accentJulglo)
+                    Text("\(Int(job.progress * 100))%").font(.subheadline.weight(.bold)).monospacedDigit().foregroundStyle(.accentMalgeul)
                 }
             }
             switch job.state {

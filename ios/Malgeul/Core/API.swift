@@ -23,7 +23,7 @@ extension Error {
     }
 }
 
-/// 줄글로 서버 API. 앱 전용 경로 /app/api/* 를 Bearer 토큰으로 호출.
+/// 말글 서버 API. 앱 전용 경로 /app/api/* 를 Bearer 토큰으로 호출.
 @MainActor
 final class API {
     static let shared = API()

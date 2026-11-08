@@ -51,7 +51,7 @@ struct ChatView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "bubble.left.and.text.bubble.right").foregroundStyle(.accentJulglo)
+            Image(systemName: "bubble.left.and.text.bubble.right").foregroundStyle(.accentMalgeul)
             Text("Claude에게 질문").font(.headline).lineLimit(1).layoutPriority(1)
             Text("스크립트 기반").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             Spacer()
@@ -67,7 +67,7 @@ struct ChatView: View {
 
     private var empty: some View {
         VStack(spacing: 12) {
-            Text("✦").font(.title).foregroundStyle(.accentJulglo)
+            Text("✦").font(.title).foregroundStyle(.accentMalgeul)
             Text("회의 스크립트에 대해 무엇이든 물어보세요").font(.subheadline).foregroundStyle(.secondary)
             VStack(spacing: 8) {
                 ForEach(suggestions, id: \.self) { s in
@@ -90,7 +90,7 @@ struct ChatView: View {
                     .textSelection(.enabled)
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .foregroundStyle(.white)
-                    .background(Color.accentJulglo, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(Color.accentMalgeul, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {

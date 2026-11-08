@@ -1,14 +1,14 @@
-# 📝 줄글로 iOS
+# 📝 말글 iOS
 
 ![Swift](https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white)
 ![iOS](https://img.shields.io/badge/iOS-18%2B-000000?style=flat-square&logo=apple&logoColor=white)
 ![SwiftUI](https://img.shields.io/badge/SwiftUI-앱-0A84FF?style=flat-square&logo=swift&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-TestFlight-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 
-회의 녹음 받아쓰기 서비스 **줄글로**의 iPhone·iPad 앱입니다. 웹에서 하던 일을 모두 앱에서 할 수 있고, 앱 안에서 바로 녹음해 올릴 수 있습니다.
+회의 녹음을 글로 바꿔 주는 서비스 **말글**(말 → 글)의 iPhone·iPad 앱입니다. 웹에서 하던 일을 모두 앱에서 할 수 있고, 앱 안에서 바로 녹음해 올릴 수 있습니다.
 
 > [!NOTE]
-> 이 저장소에는 앱 코드만 있습니다. 서버 주소와 앱 토큰은 코드에 없으며, 설정 화면이나 `julglo://setup?server=…&token=…` 링크로 기기에 입력합니다(토큰은 키체인 저장).
+> 이 저장소에는 앱 코드만 있습니다. 서버 주소와 앱 토큰은 코드에 없으며, 설정 화면이나 `malgeul://setup?server=…&token=…` 링크로 기기에 입력합니다(토큰은 키체인 저장).
 
 ---
 
@@ -18,7 +18,8 @@
 |------|------|
 | 🎙️ 녹음 | 앱에서 바로 녹음(AAC 모노 24kHz), 일시정지·이어서, 화면이 꺼져도 계속 녹음, 전화 등 끼어들기 후 자동 이어 녹음, 실시간 파형 |
 | ⬆️ 업로드 | 녹음 끝 → 제목 입력 → 업로드(녹음 시작 시각을 녹음 시각으로 저장), 선택 시 압축이 끝나면 바로 받아쓰기 |
-| 📂 파일 추가 | 파일 앱에서 가져오기, 음성 메모 등 다른 앱의 공유·열기로 바로 업로드 |
+| 📂 파일 추가 | 파일 앱에서 가져오기 |
+| 📤 다른 앱에서 보내기 | 음성 메모·파일 앱 등의 공유 메뉴 → **말글** → 제목 입력 → 보내기 (공유 확장이 바로 업로드, 선택 시 서버가 압축 후 자동 받아쓰기) |
 | 🔁 백그라운드 업로드 | 앱을 닫아도 업로드 계속, SHA-256 중복 확인, 100MB 초과는 Tailscale 직통 경로로만 |
 | 📋 회의 목록 | 상태·길이·크기(압축 중 표시)·녹음 시각·등록 상대 시각·비용(달러/원)·태그, 정렬 7가지, 검색, 통계(전체·완료·총 길이·누적 비용·환율) |
 | ✏️ 편집 | 제목 수정, 녹음 시각 수정, 여러 개 선택 삭제 |
@@ -44,6 +45,7 @@ flowchart LR
     H --> I[녹음 완료 → 업로드]
     G --> J[내 녹음]
     K[설정 탭]
+    L[음성 메모 공유 메뉴] --> M[말글로 보내기<br/>공유 확장] --> B
 ```
 
 ---
@@ -56,7 +58,7 @@ flowchart LR
 <summary>설정 링크 형식</summary>
 
 ```
-julglo://setup?server=https://<서버>&tailscale=https://<Tailscale 직통 주소>&token=<앱 토큰>
+malgeul://setup?server=https://<서버>&tailscale=https://<Tailscale 직통 주소>&token=<앱 토큰>
 ```
 
 </details>
@@ -72,6 +74,7 @@ Mac 없이 GitHub Actions에서 빌드합니다.
 | `ios/**` 푸시 | 시뮬레이터 빌드(서명 없음)로 컴파일 확인 |
 | `gh workflow run ios.yml -f testflight=true` | 아카이브 → IPA → TestFlight 업로드 |
 
-- 프로젝트 파일은 `ios/gen_project.py`로 생성합니다(동기화 폴더 방식이라 `ios/Julglo/` 안의 Swift 파일은 자동 포함).
+- 프로젝트 파일은 `ios/gen_project.py`로 생성합니다(동기화 폴더 방식이라 `ios/Malgeul/` 안의 Swift 파일은 자동 포함).
 - 필요한 저장소 비밀값: `ASC_KEY_P8`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `APPLE_TEAM_ID`
-- 번들 ID: `kr.b-612.julglo`
+- 번들 ID: `kr.b-612.malgeul` (앱), `kr.b-612.malgeul.share` (공유 확장)
+- 앱과 공유 확장은 공유 키체인 그룹(`kr.b-612.malgeul.shared`)으로 서버 주소·토큰을 함께 씀(App Group 미사용)

@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 @main
-struct JulgloApp: App {
+struct MalgeulApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var config = AppConfig.shared
     @StateObject private var router = Router.shared
@@ -76,14 +76,14 @@ struct JulgloApp: App {
                 .environmentObject(recorder)
                 .environmentObject(recordings)
                 .environmentObject(player)
-                .tint(.accentJulglo)
+                .tint(.accentMalgeul)
                 .onOpenURL(perform: handle)
         }
     }
 
     private func handle(_ url: URL) {
         if url.isFileURL {
-            // 다른 앱(음성 메모·파일 등)에서 '줄글로로 열기'/공유
+            // 다른 앱(음성 메모·파일 등)에서 '말글로 열기'/공유
             router.tab = .meetings
             uploads.enqueueImported(url)
             return
@@ -93,8 +93,8 @@ struct JulgloApp: App {
             Task { await store.refresh() }
             return
         }
-        // julglo://meeting/123
-        if url.scheme == "julglo", url.host == "meeting", let id = Int(url.lastPathComponent) {
+        // malgeul://meeting/123
+        if url.scheme == "malgeul", url.host == "meeting", let id = Int(url.lastPathComponent) {
             router.tab = .meetings
             router.meetingID = id
         }

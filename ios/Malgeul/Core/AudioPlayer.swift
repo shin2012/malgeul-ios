@@ -50,7 +50,7 @@ final class AudioPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         p.prepareToPlay()
         p.currentTime = from
         stopAt = to
-        guard p.play() else { throw NSError(domain: "julglo", code: 2, userInfo: [NSLocalizedDescriptionKey: "재생할 수 없습니다"]) }
+        guard p.play() else { throw NSError(domain: "malgeul", code: 2, userInfo: [NSLocalizedDescriptionKey: "재생할 수 없습니다"]) }
         player = p
         playingKey = key
         let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }

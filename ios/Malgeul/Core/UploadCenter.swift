@@ -1,6 +1,4 @@
 import Foundation
-import CryptoKit
-import UniformTypeIdentifiers
 
 struct UploadJob: Codable, Identifiable, Equatable {
     enum State: String, Codable { case analyzing, uploading, finishing, failed }
@@ -28,8 +26,8 @@ struct UploadJob: Codable, Identifiable, Equatable {
 @MainActor
 final class UploadCenter: NSObject, ObservableObject {
     static let shared = UploadCenter()
-    static let sessionID = "kr.b-612.julglo.upload"
-    static let hundredMB: Int64 = 100 * 1024 * 1024
+    static let sessionID = "kr.b-612.malgeul.upload"
+    static let hundredMB = UploadKit.hundredMB
 
     @Published private(set) var jobs: [UploadJob] = []
     /// 중복 파일 알림 (기존 회의 제목)
@@ -160,7 +158,7 @@ final class UploadCenter: NSObject, ObservableObject {
             let server = ts ? AppConfig.shared.tailscaleServer : AppConfig.shared.server
 
             // 2) 중복 확인
-            let hash = await Task.detached(priority: .userInitiated) { Self.sha256(of: src) }.value
+            let hash = await Task.detached(priority: .userInitiated) { UploadKit.sha256(of: src) }.value
             if let hash, let dup = try? await API.shared.checkHash(hash, server: server), dup.duplicate {
                 duplicateTitle = dup.existing?.title ?? "(제목 없음)"
                 finish(id, removeSource: true)
@@ -170,10 +168,15 @@ final class UploadCenter: NSObject, ObservableObject {
             // 3) 멀티파트 본문 파일 만들기 → 백그라운드 업로드
             do {
                 let body = Self.workDir.appending(path: "\(id.uuidString).body")
-                let boundary = "julglo-\(UUID().uuidString)"
+                let boundary = "malgeul-\(UUID().uuidString)"
                 let fname = job.filename
+                // 녹음 시각·자동 받아쓰기는 서버가 업로드와 함께 처리 (앱이 꺼져 있어도 됨)
+                var fields: [String: String] = [:]
+                if let at = job.recordedAt { fields["recorded_at"] = DateParse.isoString(at) }
+                if job.autoTranscribe { fields["auto_transcribe"] = "1" }
+                let f = fields
                 try await Task.detached(priority: .userInitiated) {
-                    try Self.writeMultipart(source: src, filename: fname, boundary: boundary, to: body)
+                    try UploadKit.writeMultipart(source: src, filename: fname, fields: f, boundary: boundary, to: body)
                 }.value
                 var req = try API.shared.request("meetings/upload", method: "POST", server: server)
                 req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
@@ -222,61 +225,7 @@ final class UploadCenter: NSObject, ObservableObject {
         }
         if let rid = job.recordingID { RecordingStore.shared.markUploaded(rid, meetingID: meetingID) }
         finish(id, removeSource: true)
-        Task {
-            if let at = job.recordedAt { _ = try? await API.shared.setRecordedAt(meetingID, at) }
-            await MeetingStore.shared.refresh()
-            if job.autoTranscribe { await Self.transcribeWhenReady(meetingID) }
-        }
-    }
-
-    /// 서버 압축(audio_ready=1)이 끝나길 기다렸다가 AssemblyAI 받아쓰기 시작
-    static func transcribeWhenReady(_ id: Int) async {
-        for _ in 0..<200 {
-            if let m = try? await API.shared.meeting(id).meeting {
-                if m.audioReady == 1 {
-                    if m.status == "pending" || m.status == "error" {
-                        try? await API.shared.startTranscribe(id, local: false)
-                        await MeetingStore.shared.refresh()
-                    }
-                    return
-                }
-            }
-            try? await Task.sleep(for: .seconds(3))
-        }
-    }
-
-    // MARK: - 파일 도우미
-
-    nonisolated static func sha256(of url: URL) -> String? {
-        guard let h = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? h.close() }
-        var hasher = SHA256()
-        while true {
-            let chunk = autoreleasepool { h.readData(ofLength: 4 * 1024 * 1024) }
-            if chunk.isEmpty { break }
-            hasher.update(data: chunk)
-        }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
-
-    nonisolated static func writeMultipart(source: URL, filename: String, boundary: String, to out: URL) throws {
-        FileManager.default.createFile(atPath: out.path, contents: nil)
-        let w = try FileHandle(forWritingTo: out)
-        defer { try? w.close() }
-        let mime = UTType(filenameExtension: (filename as NSString).pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-        let safeName = filename.replacingOccurrences(of: "\"", with: "'").replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "")
-        var head = "--\(boundary)\r\n"
-        head += "Content-Disposition: form-data; name=\"file\"; filename=\"\(safeName)\"\r\n"
-        head += "Content-Type: \(mime)\r\n\r\n"
-        try w.write(contentsOf: Data(head.utf8))
-        let r = try FileHandle(forReadingFrom: source)
-        defer { try? r.close() }
-        while true {
-            let chunk = autoreleasepool { r.readData(ofLength: 4 * 1024 * 1024) }
-            if chunk.isEmpty { break }
-            try w.write(contentsOf: chunk)
-        }
-        try w.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
+        Task { await MeetingStore.shared.refresh() }
     }
 }
 

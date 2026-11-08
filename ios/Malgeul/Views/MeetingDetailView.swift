@@ -182,7 +182,7 @@ struct SegmentRow: View {
                             }
                         }
                         .font(.caption)
-                        .foregroundStyle(player.playingKey == key ? Color.accentJulglo : Color.secondary)
+                        .foregroundStyle(player.playingKey == key ? Color.accentMalgeul : Color.secondary)
                         .padding(.horizontal, 7).padding(.vertical, 3)
                         .background(Color.secondary.opacity(player.playingKey == key ? 0.15 : 0.08), in: Capsule())
                     }

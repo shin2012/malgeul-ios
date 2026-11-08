@@ -140,7 +140,7 @@ final class Recorder: NSObject, ObservableObject {
             ]
             let r = try AVAudioRecorder(url: url, settings: settings)
             r.isMeteringEnabled = true
-            guard r.record() else { throw NSError(domain: "julglo", code: 1, userInfo: [NSLocalizedDescriptionKey: "녹음을 시작할 수 없습니다"]) }
+            guard r.record() else { throw NSError(domain: "malgeul", code: 1, userInfo: [NSLocalizedDescriptionKey: "녹음을 시작할 수 없습니다"]) }
             recorder = r
             elapsed = 0
             levels = Array(repeating: 0, count: levels.count)

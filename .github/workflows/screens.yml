@@ -25,14 +25,14 @@ jobs:
         working-directory: ios
         run: |
           set -o pipefail
-          xcodebuild -project Julglo.xcodeproj -scheme Julglo -configuration Debug -sdk iphonesimulator \
+          xcodebuild -project Malgeul.xcodeproj -scheme Malgeul -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/dd CODE_SIGNING_ALLOWED=NO build \
             2>&1 | tee build.log | grep -E "error:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build.log
       - name: 스크린샷
         env:
           SCREENS: ${{ inputs.screens }}
-        run: bash ios/ci/shots.sh /tmp/dd/Build/Products/Debug-iphonesimulator/Julglo.app /tmp/shots
+        run: bash ios/ci/shots.sh /tmp/dd/Build/Products/Debug-iphonesimulator/Malgeul.app /tmp/shots
       - uses: actions/upload-artifact@v4
         if: always()
         with:

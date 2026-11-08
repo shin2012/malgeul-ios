@@ -30,13 +30,13 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
             }
             return of.call(this, input, init);
           };
-          window.print = function(){ window.webkit.messageHandlers.julgloPrint.postMessage(document.title || ''); };
+          window.print = function(){ window.webkit.messageHandlers.malgeulPrint.postMessage(document.title || ''); };
         })();
         """
         let cfg = WKWebViewConfiguration()
         let ucc = WKUserContentController()
         ucc.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        ucc.add(WeakScriptHandler(self), name: "julgloPrint")
+        ucc.add(WeakScriptHandler(self), name: "malgeulPrint")
         cfg.userContentController = ucc
         cfg.websiteDataStore = .nonPersistent()
         let wv = WKWebView(frame: .zero, configuration: cfg)
@@ -106,7 +106,7 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
 
     // MARK: 인쇄 (페이지의 '인쇄 / PDF 저장' 버튼)
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "julgloPrint", let webView else { return }
+        guard message.name == "malgeulPrint", let webView else { return }
         let info = UIPrintInfo(dictionary: nil)
         info.outputType = .general
         info.jobName = (message.body as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "회의록"

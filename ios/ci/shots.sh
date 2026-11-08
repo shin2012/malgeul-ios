@@ -2,7 +2,7 @@
 # Usage: shots.sh <app path> <out dir>
 set -u
 APP="$1"; OUT="$2"; mkdir -p "$OUT"
-BUNDLE=kr.b-612.julglo
+BUNDLE=kr.b-612.malgeul
 ARGS=(-demoServer http://127.0.0.1:8080 -demoToken demo)
 DEFAULT="list detail chat doc record settings"
 read -r -a SCREENS <<< "${SCREENS:-$DEFAULT}"

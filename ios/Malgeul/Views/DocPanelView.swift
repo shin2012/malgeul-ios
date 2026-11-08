@@ -151,8 +151,8 @@ struct DocPanelView: View {
                         if r?.editedAt != nil {
                             Text("수정본").font(.caption.weight(.semibold))
                                 .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color.accentJulglo.opacity(0.12), in: Capsule())
-                                .foregroundStyle(.accentJulglo)
+                                .background(Color.accentMalgeul.opacity(0.12), in: Capsule())
+                                .foregroundStyle(.accentMalgeul)
                         }
                     }
                     if let s = r?.subject { Text(s).font(.subheadline).foregroundStyle(.secondary) }

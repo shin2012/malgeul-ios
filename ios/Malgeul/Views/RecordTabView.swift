@@ -35,7 +35,7 @@ struct RecordTabView: View {
                                 if r.meetingID == nil && uploads.isUploading(recordingID: r.id) == nil && config.isConfigured {
                                     Button { recordings.upload(r, autoTranscribe: config.autoTranscribeRecordings) } label: {
                                         Label("업로드", systemImage: "arrow.up.circle")
-                                    }.tint(.accentJulglo)
+                                    }.tint(.accentMalgeul)
                                 }
                             }
                             .contextMenu {
@@ -59,7 +59,7 @@ struct RecordTabView: View {
                 } header: {
                     Text("내 녹음")
                 } footer: {
-                    Text("녹음 파일은 이 기기의 ‘파일 › 나의 iPhone › 줄글로 › 녹음’에도 보관됩니다.")
+                    Text("녹음 파일은 이 기기의 ‘파일 › 나의 iPhone › 말글 › 녹음’에도 보관됩니다.")
                 }
             }
             .navigationTitle("녹음")
@@ -216,7 +216,7 @@ struct RecordingRow: View {
             Button { player.toggleFile(recording.fileURL, key: key) } label: {
                 Image(systemName: player.playingKey == key ? "stop.circle.fill" : "play.circle.fill")
                     .font(.system(size: 30))
-                    .foregroundStyle(.accentJulglo)
+                    .foregroundStyle(.accentMalgeul)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(player.playingKey == key ? "정지" : "재생")
@@ -236,7 +236,7 @@ struct RecordingRow: View {
             case .failed:
                 Text(job.message ?? "업로드 실패").font(.caption).foregroundStyle(.red)
             case .uploading:
-                ProgressView(value: job.progress).tint(.accentJulglo)
+                ProgressView(value: job.progress).tint(.accentMalgeul)
             default:
                 HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("업로드 준비 중").font(.caption).foregroundStyle(.secondary) }
             }
