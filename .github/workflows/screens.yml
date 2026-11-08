@@ -1,0 +1,41 @@
+name: Screens
+
+# 시뮬레이터 스크린샷 — 중립 예시 데이터만 내는 가짜 서버(ios/ci/mock_server.py) 사용
+on:
+  workflow_dispatch:
+    inputs:
+      screens:
+        description: "찍을 화면 (공백 구분, 비우면 전체)"
+        default: ""
+
+jobs:
+  shots:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | grep -viE "beta|_RC" | sort -V | tail -1)"
+      - name: 가짜 서버
+        run: |
+          nohup python3 ios/ci/mock_server.py > /tmp/server.log 2>&1 &
+          sleep 2
+          curl -fs http://127.0.0.1:8080/health
+      - name: 빌드
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Julglo.xcodeproj -scheme Julglo -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/dd CODE_SIGNING_ALLOWED=NO build \
+            2>&1 | tee build.log | grep -E "error:|BUILD" || true
+          grep -q "BUILD SUCCEEDED" build.log
+      - name: 스크린샷
+        env:
+          SCREENS: ${{ inputs.screens }}
+        run: bash ios/ci/shots.sh /tmp/dd/Build/Products/Debug-iphonesimulator/Julglo.app /tmp/shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots
+          path: /tmp/shots
+          retention-days: 3

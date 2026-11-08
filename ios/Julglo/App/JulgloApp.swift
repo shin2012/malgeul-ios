@@ -10,7 +10,31 @@ final class Router: ObservableObject {
     @Published var meetingID: Int?
     /// 녹음 탭으로 가면서 바로 녹음 시작
     @Published var startRecordingRequest = false
+    /// 스크린샷용(DEBUG): 상세 화면에서 채팅·문서 바로 열기
+    var debugOpenChat = false
+    var debugOpenDoc = false
 }
+
+#if DEBUG
+/// CI 스크린샷용: -demoServer URL -demoToken T -screen 이름
+@MainActor
+enum DebugRoute {
+    static func apply() {
+        let d = UserDefaults.standard
+        if let s = d.string(forKey: "demoServer") { AppConfig.shared.server = s; AppConfig.shared.tailscaleServer = "" }
+        if let t = d.string(forKey: "demoToken") { AppConfig.shared.token = t }
+        let r = Router.shared
+        switch d.string(forKey: "screen") ?? "" {
+        case "detail": r.meetingID = 5
+        case "chat": r.meetingID = 5; r.debugOpenChat = true
+        case "doc": r.meetingID = 5; r.debugOpenDoc = true
+        case "record": r.tab = .record
+        case "settings": r.tab = .settings
+        default: break
+        }
+    }
+}
+#endif
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -35,6 +59,12 @@ struct JulgloApp: App {
     @StateObject private var recorder = Recorder.shared
     @StateObject private var recordings = RecordingStore.shared
     @StateObject private var player = AudioPlayer.shared
+
+    init() {
+        #if DEBUG
+        DebugRoute.apply()
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {

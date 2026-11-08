@@ -6,6 +6,7 @@ struct MeetingDetailView: View {
 
     @EnvironmentObject private var store: MeetingStore
     @EnvironmentObject private var player: AudioPlayer
+    @EnvironmentObject private var router: Router
     @Environment(\.horizontalSizeClass) private var hsize
     @AppStorage("mt_chat_open") private var chatOpenPref = true
     @StateObject private var doc = DocModel()
@@ -80,6 +81,8 @@ struct MeetingDetailView: View {
                 detail = m
             }
             await load()
+            if router.debugOpenChat { router.debugOpenChat = false; chatOpen = true }
+            if router.debugOpenDoc { router.debugOpenDoc = false; showDoc = true }
             doc.onSpeakerFinished = { Task { await load() } }
             await doc.start(meetingID)
         }
