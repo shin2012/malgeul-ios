@@ -21,7 +21,7 @@ final class RecordingStore: ObservableObject {
 
     @Published private(set) var items: [Recording] = []
 
-    static var folder: URL {
+    nonisolated static var folder: URL {
         let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appending(path: "녹음", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d

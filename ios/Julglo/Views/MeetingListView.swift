@@ -40,64 +40,84 @@ struct MeetingListView: View {
     @State private var deleteOne: Meeting?
     @State private var errorText: String?
 
-    private var filtered: [Meeting] {
+
+    private var filtered: [Meeting] { store.sorted(matching(store.meetings)) }
+
+    private func matching(_ all: [Meeting]) -> [Meeting] {
         let q = search.trimmingCharacters(in: .whitespaces)
-        let list = q.isEmpty ? store.meetings : store.meetings.filter {
-            $0.title.localizedCaseInsensitiveContains(q) || $0.tags.contains { $0.localizedCaseInsensitiveContains(q) }
-                || ($0.originalFilename ?? "").localizedCaseInsensitiveContains(q)
+        if q.isEmpty { return all }
+        return all.filter { (m: Meeting) -> Bool in
+            if m.title.localizedCaseInsensitiveContains(q) { return true }
+            if m.tags.contains(where: { $0.localizedCaseInsensitiveContains(q) }) { return true }
+            return (m.originalFilename ?? "").localizedCaseInsensitiveContains(q)
         }
-        return store.sorted(list)
     }
 
     var body: some View {
-        Group {
-            if !config.isConfigured {
-                ContentUnavailableView {
-                    Label("서버 연결 필요", systemImage: "key")
-                } description: {
-                    Text("설정에서 서버 주소와 앱 토큰을 입력하면 회의 목록이 나타납니다.\n녹음은 연결 없이도 할 수 있어요.")
-                } actions: {
-                    Button("설정 열기") { router.tab = .settings }.buttonStyle(.borderedProminent)
-                }
-            } else if !store.loaded {
-                ProgressView("불러오는 중...")
-            } else {
-                list
+        dialogs2(dialogs1(main))
+    }
+
+    @ViewBuilder private var state: some View {
+        if !config.isConfigured {
+            ContentUnavailableView {
+                Label("서버 연결 필요", systemImage: "key")
+            } description: {
+                Text("설정에서 서버 주소와 앱 토큰을 입력하면 회의 목록이 나타납니다.\n녹음은 연결 없이도 할 수 있어요.")
+            } actions: {
+                Button("설정 열기") { router.tab = .settings }
+                    .buttonStyle(.borderedProminent)
             }
+        } else if !store.loaded {
+            ProgressView("불러오는 중...")
+        } else {
+            list
         }
-        .navigationTitle("줄글로")
-        .toolbar { toolbar }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.audio, .movie, .mpeg4Movie, .mpeg4Audio],
-                      allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result { urls.forEach { uploads.enqueueImported($0) } }
-        }
-        .task(id: config.token) { if config.isConfigured { await store.refresh() } }
-        .confirmationDialog("아직 받아쓰기가 되지 않았습니다. 방식을 선택해주세요.",
-                            isPresented: Binding(get: { askTranscribe != nil }, set: { if !$0 { askTranscribe = nil } }),
-                            titleVisibility: .visible, presenting: askTranscribe) { m in
-            Button("AssemblyAI") { transcribe(m, local: false) }
-            Button("🖥 로컬") { transcribe(m, local: true) }
-            Button("취소", role: .cancel) {}
-        }
-        .alert("파일 압축 처리 중입니다. 잠시 후 다시 시도해주세요.", isPresented: $compressingAlert) {
-            Button("확인", role: .cancel) {}
-        }
-        .alert("제목 수정", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { m in
-            TextField("제목", text: $renameText)
-            Button("저장") { saveTitle(m) }
-            Button("취소", role: .cancel) {}
-        }
-        .sheet(item: $editingDate) { m in RecordedAtSheet(meeting: m) }
-        .confirmationDialog("이 회의를 삭제할까요?", isPresented: Binding(get: { deleteOne != nil }, set: { if !$0 { deleteOne = nil } }),
-                            titleVisibility: .visible, presenting: deleteOne) { m in
-            Button("삭제", role: .destructive) { Task { await delete([m.id]) } }
-        } message: { m in Text(m.title) }
-        .confirmationDialog("선택한 \(multi.count)개를 삭제할까요?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("\(multi.count)개 삭제", role: .destructive) { Task { await delete(multi) } }
-        }
-        .alert("오류", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
-            Button("확인", role: .cancel) {}
-        } message: { Text(errorText ?? "") }
+    }
+
+    private var main: some View {
+        state
+            .navigationTitle("줄글로")
+            .toolbar { toolbar }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.audio, .movie, .mpeg4Movie, .mpeg4Audio],
+                          allowsMultipleSelection: true) { result in
+                if case .success(let urls) = result { urls.forEach { uploads.enqueueImported($0) } }
+            }
+            .task(id: config.token) { if config.isConfigured { await store.refresh() } }
+    }
+
+    private func dialogs1<V: View>(_ v: V) -> some View {
+        v
+            .confirmationDialog("아직 받아쓰기가 되지 않았습니다. 방식을 선택해주세요.",
+                                isPresented: Binding(get: { askTranscribe != nil }, set: { if !$0 { askTranscribe = nil } }),
+                                titleVisibility: .visible, presenting: askTranscribe) { (m: Meeting) in
+                Button("AssemblyAI") { transcribe(m, local: false) }
+                Button("🖥 로컬") { transcribe(m, local: true) }
+                Button("취소", role: .cancel) {}
+            }
+            .alert("파일 압축 처리 중입니다. 잠시 후 다시 시도해주세요.", isPresented: $compressingAlert) {
+                Button("확인", role: .cancel) {}
+            }
+            .alert("제목 수정", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }),
+                   presenting: renaming) { (m: Meeting) in
+                TextField("제목", text: $renameText)
+                Button("저장") { saveTitle(m) }
+                Button("취소", role: .cancel) {}
+            }
+            .sheet(item: $editingDate) { (m: Meeting) in RecordedAtSheet(meeting: m) }
+    }
+
+    private func dialogs2<V: View>(_ v: V) -> some View {
+        v
+            .confirmationDialog("이 회의를 삭제할까요?", isPresented: Binding(get: { deleteOne != nil }, set: { if !$0 { deleteOne = nil } }),
+                                titleVisibility: .visible, presenting: deleteOne) { (m: Meeting) in
+                Button("삭제", role: .destructive) { Task { await delete([m.id]) } }
+            } message: { (m: Meeting) in Text(m.title) }
+            .confirmationDialog("선택한 \(multi.count)개를 삭제할까요?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("\(multi.count)개 삭제", role: .destructive) { Task { await delete(multi) } }
+            }
+            .alert("오류", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
+                Button("확인", role: .cancel) {}
+            } message: { Text(errorText ?? "") }
     }
 
     // MARK: 목록
