@@ -1,0 +1,5 @@
+build.log
+*.ipa
+xcuserdata/
+.DS_Store
+DerivedData/
