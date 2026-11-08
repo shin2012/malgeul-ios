@@ -52,8 +52,8 @@ struct ChatView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "bubble.left.and.text.bubble.right").foregroundStyle(.accentJulglo)
-            Text("Claude에게 질문").font(.headline)
-            Text("스크립트 기반").font(.caption).foregroundStyle(.secondary)
+            Text("Claude에게 질문").font(.headline).lineLimit(1).layoutPriority(1)
+            Text("스크립트 기반").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             Spacer()
             if !messages.isEmpty {
                 Button { confirmClear = true } label: { Image(systemName: "trash") }

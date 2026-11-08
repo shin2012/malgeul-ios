@@ -348,7 +348,6 @@ struct MeetingRow: View {
         }
         .labelStyle(CompactLabel())
         .lineLimit(1)
-        .minimumScaleFactor(0.8)
         .monospacedDigit()
         .font(.caption)
         .foregroundStyle(.secondary)

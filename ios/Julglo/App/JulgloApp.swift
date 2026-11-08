@@ -102,6 +102,10 @@ struct JulgloApp: App {
 }
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var config: AppConfig
+    @EnvironmentObject private var store: MeetingStore
+    @EnvironmentObject private var recordings: RecordingStore
     @EnvironmentObject private var router: Router
     @EnvironmentObject private var recorder: Recorder
     @EnvironmentObject private var uploads: UploadCenter
@@ -124,6 +128,12 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .onChange(of: scenePhase) { _, phase in
+            // 앱으로 돌아오면 목록을 새로 받음 (다른 기기·웹에서 바뀐 내용 반영)
+            guard phase == .active else { return }
+            recordings.reload()
+            if config.isConfigured { Task { await store.refresh() } }
+        }
         .alert("중복 파일", isPresented: Binding(get: { uploads.duplicateTitle != nil }, set: { if !$0 { uploads.duplicateTitle = nil } })) {
             Button("확인", role: .cancel) { uploads.duplicateTitle = nil }
         } message: {
