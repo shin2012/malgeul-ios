@@ -7,14 +7,13 @@ struct MeetingsSplitView: View {
     var body: some View {
         NavigationSplitView {
             MeetingListView()
+                .navigationSplitViewColumnWidth(min: 320, ideal: 400, max: 520)
         } detail: {
-            NavigationStack {
-                if let id = router.meetingID {
-                    MeetingDetailView(meetingID: id).id(id)
-                } else {
-                    ContentUnavailableView("회의를 선택하세요", systemImage: "text.bubble",
-                                           description: Text("받아쓰기가 끝난 회의를 누르면 스크립트와 채팅이 열립니다."))
-                }
+            if let id = router.meetingID {
+                MeetingDetailView(meetingID: id).id(id)
+            } else {
+                ContentUnavailableView("회의를 선택하세요", systemImage: "text.bubble",
+                                       description: Text("받아쓰기가 끝난 회의를 누르면 스크립트와 채팅이 열립니다."))
             }
         }
     }
@@ -326,31 +325,42 @@ struct MeetingRow: View {
         .padding(.vertical, 2)
     }
 
+    /// 두 줄 고정: (길이 · 크기 · 비용) / (녹음 시각 · 등록 상대 시각)
     private var meta: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { metaItems }
-            VStack(alignment: .leading, spacing: 3) { metaItems }
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 12) {
+                Label(Fmt.duration(meeting.durationSeconds), systemImage: "clock")
+                if meeting.isCompressing {
+                    HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("압축 중") }
+                } else {
+                    Label(Fmt.size(meeting.fileSizeBytes), systemImage: "doc")
+                }
+                if let c = meeting.costUsd {
+                    Text(Fmt.krw(c, rate: store.krwRate).map { "\(Fmt.usd(c)) ≈ \($0)" } ?? Fmt.usd(c))
+                }
+            }
+            HStack(spacing: 12) {
+                Label(Fmt.date(meeting.recordedOrCreated), systemImage: "calendar")
+                TimelineView(.periodic(from: .now, by: 30)) { ctx in
+                    Text("등록 \(Fmt.relative(meeting.createdAt, now: ctx.date))")
+                }
+            }
         }
+        .labelStyle(CompactLabel())
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .monospacedDigit()
         .font(.caption)
         .foregroundStyle(.secondary)
     }
+}
 
-    @ViewBuilder private var metaItems: some View {
-        Label(Fmt.duration(meeting.durationSeconds), systemImage: "clock").monospacedDigit()
-        if meeting.isCompressing {
-            HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("압축 중") }
-        } else {
-            Label(Fmt.size(meeting.fileSizeBytes), systemImage: "doc")
-        }
-        Label(Fmt.date(meeting.recordedOrCreated), systemImage: "calendar").monospacedDigit()
-        TimelineView(.periodic(from: .now, by: 30)) { ctx in
-            Text("등록 \(Fmt.relative(meeting.createdAt, now: ctx.date))")
-        }
-        if let c = meeting.costUsd {
-            HStack(spacing: 3) {
-                Text(Fmt.usd(c)).monospacedDigit()
-                if let k = Fmt.krw(c, rate: store.krwRate) { Text("≈ \(k)") }
-            }
+/// 아이콘과 글자를 붙여서 한 줄로
+struct CompactLabel: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 3) {
+            configuration.icon.imageScale(.small)
+            configuration.title.fixedSize()
         }
     }
 }

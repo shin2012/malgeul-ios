@@ -40,6 +40,13 @@ struct MeetingDetailView: View {
                 ProgressView("불러오는 중...")
             }
         }
+        .inspector(isPresented: $chatOpen) {
+            ChatView(meetingID: meetingID)
+                .inspectorColumnWidth(min: 280, ideal: 380, max: 700)
+                .presentationDetents([.medium, .large])
+        }
+        // 툴바·제목·검색은 inspector 뒤에 붙여야 본문 쪽 내비게이션 막대에 표시됨
+        .searchable(text: $search, placement: .toolbar, prompt: "스크립트 검색")
         .navigationTitle(detail?.meeting.title ?? store.meetings.first { $0.id == meetingID }?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -59,11 +66,6 @@ struct MeetingDetailView: View {
                     Label(chatOpen ? "채팅 숨기기" : "채팅 열기", systemImage: chatOpen ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
                 }
             }
-        }
-        .inspector(isPresented: $chatOpen) {
-            ChatView(meetingID: meetingID)
-                .inspectorColumnWidth(min: 280, ideal: 380, max: 700)
-                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showDoc) {
             DocPanelView(meetingID: meetingID, doc: doc)
@@ -121,7 +123,6 @@ struct MeetingDetailView: View {
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .searchable(text: $search, placement: .toolbar, prompt: "스크립트 검색")
         .refreshable { await Task { await load() }.value }
     }
 
