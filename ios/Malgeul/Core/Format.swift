@@ -46,6 +46,23 @@ enum Fmt {
         f.dateFormat = "yyyy년 M월 d일 (E) a h:mm"
         return f
     }()
+    /// 목록 날짜 묶음: 오늘 · 어제 · 이번 주 · 지난주 · 이번 달 · N월 (웹과 같음)
+    static func groupLabel(_ d: Date, now: Date = .now) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.locale = Locale(identifier: "ko_KR")
+        cal.firstWeekday = 2
+        let day = cal.startOfDay(for: d), today = cal.startOfDay(for: now)
+        let diff = cal.dateComponents([.day], from: day, to: today).day ?? 0
+        if diff <= 0 { return "오늘" }
+        if diff == 1 { return "어제" }
+        let wk = cal.dateInterval(of: .weekOfYear, for: now)?.start ?? today
+        if day >= wk { return "이번 주" }
+        if let lastWk = cal.date(byAdding: .day, value: -7, to: wk), day >= lastWk { return "지난주" }
+        let y = cal.component(.year, from: d), m = cal.component(.month, from: d)
+        if y == cal.component(.year, from: now) && m == cal.component(.month, from: now) { return "이번 달" }
+        return y == cal.component(.year, from: now) ? "\(m)월" : "\(y)년 \(m)월"
+    }
+
     /// 11월 4일 (수) 오전 10:00 — 올해가 아니면 연도 포함 (웹과 같음)
     static func when(_ d: Date?) -> String {
         guard let d else { return "" }
@@ -115,6 +132,13 @@ struct SpeakerName {
     let initial: String
     /// 이름(소속) — 추정 표시 없이
     var display: String { org.isEmpty ? name : "\(name)(\(org))" }
+
+    /// 이름 고칠 때 입력칸에 넣을 값: 익명은 빈칸, '추정'만 떼고 원래 라벨
+    static func editable(_ raw: String) -> String {
+        if raw.range(of: #"^(?i)speaker\s+\w+$"#, options: .regularExpression) != nil { return "" }
+        return raw.replacingOccurrences(of: #"\s*\(\s*추정\s*\)\s*$"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #",\s*추정\)$"#, with: ")", options: .regularExpression)
+    }
 
     init(_ raw: String) {
         let t = raw.trimmingCharacters(in: .whitespaces)

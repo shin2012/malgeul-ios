@@ -171,9 +171,11 @@ struct ReportInfo: Decodable, Equatable {
     var model: String?
     var updatedAt: String?
     var editedAt: String?
+    var preview: ReportPreview?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyKey.self)
+        preview = try? c.decodeIfPresent(ReportPreview.self, forKey: AnyKey("preview"))
         type = c.str("type")
         subject = c.str("subject")
         status = c.str("status") ?? "none"
@@ -183,6 +185,15 @@ struct ReportInfo: Decodable, Equatable {
         editedAt = c.str("edited_at")
     }
     init(status: String) { self.status = status }
+}
+
+/// 회의록 미리보기 (서버 GET /report 의 preview: 목적·섹션·결정사항, 글자만)
+struct ReportPreview: Decodable, Equatable {
+    struct Item: Decodable, Equatable { var text: String; var children: [String] }
+    struct Callout: Decodable, Equatable { var label: String?; var text: String? }
+    struct Section: Decodable, Equatable { var title: String; var items: [Item]; var callout: Callout? }
+    var purpose: String?
+    var sections: [Section]
 }
 
 // MARK: - 화자 자동 식별

@@ -87,16 +87,14 @@ final class DocModel: ObservableObject {
 private let typeLabel: [(String, String)] = [("auto", "자동 판별"), ("meeting", "회의록"), ("trip", "출장복명서")]
 private func typeName(_ t: String?) -> String { typeLabel.first { $0.0 == t }?.1 ?? "문서" }
 
+/// 회의록 패널 (웹과 같은 구성: 카드 + 미리보기)
 struct DocPanelView: View {
     let meetingID: Int
     @ObservedObject var doc: DocModel
-    /// 상세 화면 오른쪽 패널 안에 들어갈 때(제목·완료 버튼 없음)
-    var embedded = false
-    @Environment(\.dismiss) private var dismiss
 
     @State private var type = "auto"
+    @State private var chooser = false
     @State private var confirmRegenerate = false
-    @State private var confirmSpeaker = false
     @State private var showReport = false
     @State private var previewURL: URL?
     @State private var shareURL: URL?
@@ -104,163 +102,166 @@ struct DocPanelView: View {
     @State private var errorText: String?
 
     var body: some View {
-        if embedded {
-            form
-        } else {
-            NavigationStack {
-                form
-                    .navigationTitle("회의록")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("완료") { dismiss() } } }
-            }
-        }
-    }
-
-    private var form: some View {
-            Form {
-                reportSection
-                speakerSection
-            }
-            .navigationDestination(isPresented: $showReport) {
-                ReportWebView(meetingID: meetingID, onSaved: { Task { await doc.refresh() } })
-            }
-            .refreshable { await Task { await doc.refresh() }.value }
-            .task { await doc.refresh() }
-            .quickLookPreview($previewURL)
-            .sheet(item: Binding(get: { shareURL.map(ShareItem.init) }, set: { shareURL = $0?.url })) { item in
-                ShareSheet(items: [item.url])
-            }
-            .confirmationDialog("직접 고쳐 저장한 수정본이 있습니다.\n다시 작성하면 수정본은 사라집니다. 계속할까요?",
-                                isPresented: $confirmRegenerate, titleVisibility: .visible) {
-                Button("다시 작성", role: .destructive) { Task { await doc.generate(type: type) } }
-            }
-            .confirmationDialog("화자 식별을 다시 실행할까요?\n(이전에 자동으로 붙인 \"○○(추정)\" 이름은 원래 라벨로 되돌린 뒤 다시 판단합니다)",
-                                isPresented: $confirmSpeaker, titleVisibility: .visible) {
-                Button(doc.speaker?.status == nil ? "식별 실행" : "다시 식별") { Task { await doc.rerunSpeaker() } }
-            }
-            .alert("오류", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
-                Button("확인", role: .cancel) {}
-            } message: { Text(errorText ?? "") }
-    }
-
-    // MARK: 회의록 · 출장복명서
-
-    private var reportSection: some View {
-        let r = doc.report
-        return Section {
-            Picker("유형", selection: $type) {
-                ForEach(typeLabel, id: \.0) { Text($0.1).tag($0.0) }
-            }
-            .pickerStyle(.segmented)
-
-            Button {
-                if r?.status == "done" && r?.editedAt != nil { confirmRegenerate = true }
-                else { Task { await doc.generate(type: type) } }
-            } label: {
-                HStack {
-                    if r?.status == "processing" { ProgressView().padding(.trailing, 4) }
-                    Text(r?.status == "processing" ? "작성 중… (1~2분)" : r?.status == "done" ? "다시 작성" : "작성하기")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let r = doc.report {
+                    if r.status == "none" { createCard } else { reportCard(r) }
+                    if r.status == "done", let pv = r.preview { preview(r, pv) }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
                 }
-                .frame(maxWidth: .infinity)
-                // 가운데 정렬 글자 기준으로 구분선이 들여 써지지 않게 행 왼쪽 끝부터
-                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
             }
-            .disabled(r?.status == "processing")
+            .padding(16)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Color.mgBg)
+        .refreshable { await Task { await doc.refresh() }.value }
+        .task { await doc.refresh() }
+        .navigationDestination(isPresented: $showReport) {
+            ReportWebView(meetingID: meetingID, onSaved: { Task { await doc.refresh() } })
+        }
+        .quickLookPreview($previewURL)
+        .sheet(item: Binding(get: { shareURL.map(ShareItem.init) }, set: { shareURL = $0?.url })) { (item: ShareItem) in
+            ShareSheet(items: [item.url])
+        }
+        .confirmationDialog("어떤 문서로 다시 작성할까요?", isPresented: $chooser, titleVisibility: .visible) {
+            ForEach(typeLabel, id: \.0) { (t: (String, String)) in
+                Button(t.1) { type = t.0; regenerate() }
+            }
+        } message: { Text("지금 문서는 새로 작성한 문서로 바뀝니다.") }
+        .confirmationDialog("직접 고쳐 저장한 수정본이 있습니다.\n다시 작성하면 수정본은 사라집니다. 계속할까요?",
+                            isPresented: $confirmRegenerate, titleVisibility: .visible) {
+            Button("다시 작성", role: .destructive) { Task { await doc.generate(type: type) } }
+        }
+        .alert("오류", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
+            Button("확인", role: .cancel) {}
+        } message: { Text(errorText ?? "") }
+    }
 
-            if r?.status == "error" {
-                Text("실패: \(r?.errorMessage ?? "")").font(.footnote).foregroundStyle(.red)
-            }
-            if r?.status == "done" {
-                VStack(alignment: .leading, spacing: 4) {
+    private func regenerate() {
+        if doc.report?.status == "done" && doc.report?.editedAt != nil { confirmRegenerate = true }
+        else { Task { await doc.generate(type: type) } }
+    }
+
+    private var card: some Shape { RoundedRectangle(cornerRadius: 14, style: .continuous) }
+
+    private var createCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("회의록 만들기").font(.system(size: 16, weight: .bold)).foregroundStyle(Color.mgFg)
+            Text("대화 내용으로 판매운영부 양식 문서를 작성합니다. 1~2분 걸립니다.")
+                .font(.system(size: 14)).foregroundStyle(Color.mgFg3).padding(.top, 3)
+            WebSegmented(selection: $type, options: typeLabel).padding(.vertical, 14)
+            Button("작성하기") { Task { await doc.generate(type: type) } }
+                .buttonStyle(WebButtonStyle(full: true))
+        }
+        .padding(16)
+        .overlay(card.stroke(Color.mgLine, lineWidth: 1))
+    }
+
+    private func reportCard(_ r: ReportInfo) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: "doc.text").font(.system(size: 18))
+                    .foregroundStyle(Color.accentMalgeul)
+                    .frame(width: 40, height: 40)
+                    .background(Color.mgAccentWeak, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(typeName(r?.type)).fontWeight(.semibold)
-                        if r?.editedAt != nil {
-                            Text("수정본").font(.caption.weight(.semibold))
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color.accentMalgeul.opacity(0.12), in: Capsule())
-                                .foregroundStyle(.accentMalgeul)
+                        Text(typeName(r.type)).font(.system(size: 16, weight: .bold)).foregroundStyle(Color.mgFg)
+                        if r.editedAt != nil { Pill(text: "수정본") }
+                    }
+                    Group {
+                        switch r.status {
+                        case "processing": Text("작성 중… 1~2분 걸립니다")
+                        case "error": Text("작성 실패 · \(r.errorMessage ?? "")").foregroundStyle(Color.mgDanger)
+                        default: Text(Fmt.when(DateParse.iso(r.editedAt ?? r.updatedAt ?? "")) + (r.editedAt != nil ? " 수정" : " 작성"))
                         }
                     }
-                    if let s = r?.subject { Text(s).font(.subheadline).foregroundStyle(.secondary) }
+                    .font(.system(size: 13.5)).foregroundStyle(Color.mgFg3).lineLimit(2)
                 }
-                Button { showReport = true } label: { Label("보기·편집", systemImage: "doc.richtext") }
-                Button { Task { await download(pdf: true, share: false) } } label: {
-                    HStack { Label("PDF", systemImage: "doc.viewfinder"); Spacer(); if downloading == "pdf" { ProgressView() } }
-                }
-                Button { Task { await download(pdf: true, share: true) } } label: {
-                    Label("PDF 공유·저장", systemImage: "square.and.arrow.up")
-                }
-                Button { Task { await download(pdf: false, share: true) } } label: {
-                    HStack { Label("HTML 저장", systemImage: "chevron.left.forwardslash.chevron.right"); Spacer(); if downloading == "html" { ProgressView() } }
+                Spacer(minLength: 0)
+                if r.status == "processing" {
+                    ProgressView()
+                } else {
+                    Menu {
+                        if r.status == "done" {
+                            Button { Task { await download(pdf: true, share: true) } } label: { Label("PDF 공유·저장", systemImage: "square.and.arrow.up") }
+                            Button { Task { await download(pdf: false, share: true) } } label: { Label("HTML로 저장", systemImage: "arrow.down.doc") }
+                        }
+                        Button { chooser = true } label: { Label("다시 작성", systemImage: "arrow.clockwise") }
+                    } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 17, weight: .semibold)).foregroundStyle(Color.mgFg2)
+                            .frame(width: 40, height: 40).contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("더 보기")
                 }
             }
-        } header: {
-            Text("회의록 · 출장복명서 자동 작성")
-        } footer: {
-            if r?.status == "done" {
-                Text("보기 화면에서 글자를 고친 뒤 ‘저장’을 누르면 수정본이 그대로 저장되어 PDF·HTML 다운로드에도 쓰입니다.")
+            if r.status == "done" {
+                HStack(spacing: 8) {
+                    Button("보기·편집") { showReport = true }.buttonStyle(WebButtonStyle(full: true))
+                    Button {
+                        Task { await download(pdf: true, share: false) }
+                    } label: {
+                        if downloading == "pdf" { ProgressView().controlSize(.small) } else { Text("PDF") }
+                    }
+                    .buttonStyle(WebButtonStyle(kind: .ghost))
+                }
+            }
+            if r.status == "error" {
+                Button("다시 시도") { chooser = true }.buttonStyle(WebButtonStyle(full: true))
             }
         }
+        .padding(16)
+        .overlay(card.stroke(Color.mgLine, lineWidth: 1))
     }
 
-    // MARK: 화자 자동 식별
-
-    private var speakerSection: some View {
-        let s = doc.speaker
-        let res = s?.result
-        let isNew = !(res?["voice"]?["by_label"]?.isNull ?? true) || !(res?["unresolved"]?.isNull ?? true)
-        let assigned = res?["assigned"]?.array ?? []
-        return Section("화자 자동 식별") {
-            Text(statusText(s, res: res, isNew: isNew, assigned: assigned))
-                .font(.subheadline)
-
-            if isNew && s?.status == "done" && !assigned.isEmpty {
-                ForEach(Array(assigned.enumerated()), id: \.offset) { _, a in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("\(a["from"]?.string ?? "") → \(a["to"]?.string ?? "")").font(.subheadline.weight(.semibold))
-                        Text([a["basis"]?.string, a["similarity"]?.double.map { String(format: "목소리 %.2f", $0) }]
-                            .compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption).foregroundStyle(.secondary)
-                        if let ev = a["evidence"]?[0]?.string {
-                            Text("“\(ev)”").font(.caption).foregroundStyle(.secondary).lineLimit(3)
+    private func preview(_ r: ReportInfo, _ pv: ReportPreview) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let s = r.subject {
+                Text(s).font(.system(size: 17, weight: .bold)).foregroundStyle(Color.mgFg).lineSpacing(3)
+            }
+            if let p = pv.purpose, !p.isEmpty {
+                Text(p).font(.system(size: 14.5)).foregroundStyle(Color.mgFg2).lineSpacing(4).padding(.top, 6)
+            }
+            ForEach(Array(pv.sections.enumerated()), id: \.offset) { (_: Int, sec: ReportPreview.Section) in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(sec.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.mgFg3).padding(.bottom, 2)
+                    ForEach(Array(sec.items.enumerated()), id: \.offset) { (_: Int, it: ReportPreview.Item) in
+                        bullet(it.text, size: 14.5, color: Color(hex: 0x27272A), dot: true)
+                        ForEach(Array(it.children.enumerated()), id: \.offset) { (_: Int, c: String) in
+                            bullet(c, size: 14, color: Color.mgFg2, dot: false).padding(.leading, 14)
                         }
                     }
+                    if let co = sec.callout, let t = co.text, !t.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(co.label ?? "결정").font(.system(size: 12.5, weight: .bold)).foregroundStyle(Color.accentMalgeul)
+                            Text(t).font(.system(size: 14.5)).foregroundStyle(Color.mgFg).lineSpacing(3)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.mgBg2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .padding(.top, 4)
+                    }
                 }
+                .padding(.top, 20)
             }
-            if isNew && s?.status == "done", let un = res?["unresolved"]?.object, !un.isEmpty {
-                Text("미확정: " + un.sorted { $0.key < $1.key }.map { "\($0.key) (\($0.value.string ?? ""))" }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(.secondary)
+            if r.editedAt != nil {
+                Text("직접 고친 내용은 ‘보기·편집’에서 확인하세요. 이 미리보기는 처음 작성본 기준입니다.")
+                    .font(.system(size: 12.5)).foregroundStyle(Color.mgFg4).padding(.top, 20)
             }
-            if !isNew && s?.status == "done", let scores = res?["voice"]?["scores"]?.array, !scores.isEmpty {
-                Text("목소리 유사도: " + scores.prefix(3).map { "\($0["speaker"]?.string ?? "") \(String(format: "%.2f", $0["similarity"]?.double ?? 0))" }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            if !isNew && s?.status == "done", let ev = res?["content"]?["evidence"]?.array, !ev.isEmpty {
-                ForEach(Array(ev.prefix(3).enumerated()), id: \.offset) { _, e in
-                    Text("• \(e.string ?? "")").font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Button(s?.status == nil ? "식별 실행" : "다시 식별") { confirmSpeaker = true }
-                .disabled(s?.status == "processing")
         }
+        .padding(.horizontal, 4)
+        .padding(.top, 18)
+        .textSelection(.enabled)
     }
 
-    private func statusText(_ s: SpeakerIDInfo?, res: JSONValue?, isNew: Bool, assigned: [JSONValue]) -> String {
-        switch s?.status {
-        case "processing": return "내용·목소리 분석 중… (수 분 소요)"
-        case "skipped":
-            if res?["basis"]?.string == "이미 지정됨" {
-                return "이미 지정됨 (\((res?["decided"]?.array ?? []).compactMap(\.string).joined(separator: ", ")))"
-            }
-            return res?["basis"]?.string ?? "건너뜀"
-        case "error": return "오류: \(res?["error"]?.string ?? "")"
-        case "done":
-            if !assigned.isEmpty {
-                return isNew ? "\(assigned.count)명 찾음"
-                    : "\(assigned.compactMap { $0["from"]?.string }.joined(separator: ", ")) → 신요섭(추정) · \(res?["basis"]?.string ?? "")"
-            }
-            return "찾지 못함" + (isNew ? "" : " · \(res?["basis"]?.string ?? "")")
-        default: return "아직 실행 전"
+    private func bullet(_ text: String, size: CGFloat, color: Color, dot: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if dot { Circle().fill(Color.mgFg4).frame(width: 4, height: 4).alignmentGuide(.firstTextBaseline) { d in d[.bottom] + size * 0.32 } }
+            else { Rectangle().fill(Color.mgFg4).frame(width: 6, height: 1).alignmentGuide(.firstTextBaseline) { d in d[.bottom] + size * 0.35 } }
+            Text(text).font(.system(size: size)).foregroundStyle(color).lineSpacing(4)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

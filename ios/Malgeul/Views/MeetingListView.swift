@@ -34,6 +34,7 @@ struct MeetingListView: View {
     @Environment(\.horizontalSizeClass) private var hsize
 
     @State private var search = ""
+    @State private var filter: ListFilter = .all
     @State private var selecting = false
     @State private var multi = Set<Int>()
     @State private var confirmDelete = false
@@ -48,7 +49,22 @@ struct MeetingListView: View {
     @State private var errorText: String?
 
 
-    private var filtered: [Meeting] { store.sorted(matching(store.meetings)) }
+    private var filtered: [Meeting] {
+        var all = store.meetings
+        switch filter {
+        case .all: break
+        case .pending: all = all.filter { !$0.isDone }
+        case .tag(let t): all = all.filter { $0.tags.contains(t) }
+        }
+        return store.sorted(matching(all))
+    }
+
+    /// 두 번 이상 쓰인 태그 (많은 순)
+    private var topTags: [(String, Int)] {
+        var c: [String: Int] = [:]
+        for m in store.meetings { for t in m.tags { c[t, default: 0] += 1 } }
+        return c.filter { $0.value > 1 }.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(14).map { ($0.key, $0.value) }
+    }
 
     private func matching(_ all: [Meeting]) -> [Meeting] {
         let q = search.trimmingCharacters(in: .whitespaces)
@@ -83,8 +99,9 @@ struct MeetingListView: View {
 
     private var main: some View {
         state
-            .navigationTitle("전체 노트")
+            .navigationTitle(filter.title)
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(Color.white, for: .navigationBar)
             .toolbar { toolbar }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio, .movie, .mpeg4Movie, .mpeg4Audio],
                           allowsMultipleSelection: true) { result in
@@ -137,13 +154,22 @@ struct MeetingListView: View {
     @ViewBuilder private var list: some View {
         if selecting {
             List(selection: $multi) { content(selectable: true) }
-                .listStyle(.insetGrouped)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.mgBg)
                 .environment(\.editMode, .constant(.active))
         } else {
-            List(selection: $router.meetingID) { content(selectable: false) }
-                .listStyle(.insetGrouped)
+            List(selection: $router.meetingID) {
+                filterChips
+                content(selectable: false)
+            }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.mgBg)
+                .safeAreaInset(edge: .bottom) { fab }
+                .safeAreaInset(edge: .top) { recordingBanner }
                 .refreshable { await Task { await store.refresh() }.value }
-                .searchable(text: $search, prompt: "제목 · 태그 검색")
+                .searchable(text: $search, prompt: "제목·태그 검색")
                 .overlay {
                     if store.meetings.isEmpty && uploads.jobs.isEmpty {
                         ContentUnavailableView {
@@ -179,23 +205,107 @@ struct MeetingListView: View {
                     row(m, selectable: selectable)
                 }
             } header: {
-                if !g.0.isEmpty { Text(g.0) }
+                if !g.0.isEmpty {
+                    Text(g.0).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.mgFg3).textCase(nil)
+                        .padding(.top, 8)
+                }
             } footer: {
-                if gi == groups.count - 1 && store.doneCount > 0 { StatsFooter() }
+                if gi == groups.count - 1 && !filtered.isEmpty {
+                    Text("노트 \(filtered.count)개 · 총 \(Fmt.totalDuration(filtered.reduce(0) { $0 + ($1.durationSeconds ?? 0) }))")
+                        .font(.system(size: 13)).monospacedDigit().foregroundStyle(Color.mgFg4)
+                        .frame(maxWidth: .infinity).padding(.top, 20).padding(.bottom, 90)
+                }
             }
+        }
+    }
+
+    // MARK: 웹과 같은 부분들
+
+    private var filterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                chip("전체", n: store.meetings.count, on: filter == .all) { filter = .all }
+                let busy = store.meetings.filter { !$0.isDone }.count
+                if busy > 0 { chip("처리 전·중", n: busy, on: filter == .pending) { filter = .pending } }
+                ForEach(topTags, id: \.0) { (t: (String, Int)) in
+                    chip("#\(t.0)", n: t.1, on: filter == .tag(t.0)) { filter = filter == .tag(t.0) ? .all : .tag(t.0) }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 6, trailing: 0))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+        .selectionDisabled()
+    }
+
+    private func chip(_ label: String, n: Int, on: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(label).lineLimit(1)
+                Text("\(n)").monospacedDigit().foregroundStyle(on ? Color.accentMalgeul.opacity(0.7) : Color.mgFg4)
+            }
+            .font(.system(size: 14, weight: on ? .semibold : .regular))
+            .foregroundStyle(on ? Color.accentMalgeul : Color.mgFg2)
+            .padding(.horizontal, 12).frame(height: 32)
+            .background(on ? Color.mgAccentWeak : Color.mgBg2, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 오른쪽 아래 녹음 · 올리기 (웹 모바일과 같음)
+    @ViewBuilder private var fab: some View {
+        if config.isConfigured && !selecting {
+            HStack(spacing: 10) {
+                Spacer()
+                Button { startRecording() } label: {
+                    Label("녹음", systemImage: "mic.fill")
+                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                        .padding(.leading, 18).padding(.trailing, 22).frame(height: 52)
+                        .background(Color.accentMalgeul, in: Capsule())
+                        .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+                }
+                Button { importing = true } label: {
+                    Image(systemName: "square.and.arrow.up").font(.system(size: 18, weight: .medium)).foregroundStyle(Color.mgFg2)
+                        .frame(width: 52, height: 52)
+                        .background(Color.white, in: Circle())
+                        .overlay(Circle().stroke(Color.mgLine, lineWidth: 1))
+                        .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
+                }
+                .accessibilityLabel("파일 올리기")
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+        }
+    }
+
+    @ViewBuilder private var recordingBanner: some View {
+        if recorder.isActive {
+            Button { router.tab = .record } label: {
+                HStack(spacing: 8) {
+                    Circle().fill(Color.mgDanger).frame(width: 8, height: 8)
+                    Text("녹음 중 · \(Fmt.clock(recorder.elapsed))").monospacedDigit()
+                    Spacer()
+                    Text("열기").fontWeight(.semibold)
+                }
+                .font(.system(size: 14)).foregroundStyle(Color.mgFg)
+                .padding(.horizontal, 14).frame(height: 40)
+                .background(Color(hex: 0xFEEFEF), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16).padding(.vertical, 6)
+            .background(Color.white)
         }
     }
 
     /// 날짜순 정렬일 때 월별로 묶음 (다른 정렬은 한 묶음)
     private func monthGroups(_ list: [Meeting]) -> [(String, [Meeting])] {
         guard store.sortKey == .createdAt || store.sortKey == .recordedAt else { return [("", list)] }
-        let cal = Calendar.current
-        let thisYear = cal.component(.year, from: .now)
         var out: [(String, [Meeting])] = []
         for m in list {
             let d = (store.sortKey == .createdAt ? m.createdAt : m.recordedOrCreated) ?? .distantPast
-            let y = cal.component(.year, from: d), mo = cal.component(.month, from: d)
-            let label = y == thisYear ? "\(mo)월" : "\(y)년 \(mo)월"
+            let label = Fmt.groupLabel(d)
             if out.last?.0 == label { out[out.count - 1].1.append(m) } else { out.append((label, [m])) }
         }
         return out
@@ -213,6 +323,9 @@ struct MeetingListView: View {
                     .contentShape(Rectangle())
             }
         }
+        .listRowBackground(router.meetingID == m.id && !selectable ? Color.mgAccentWeak : Color.white)
+        .listRowSeparatorTint(Color.mgLine)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) { deleteOne = m } label: { Label("삭제", systemImage: "trash") }
             Button { beginRename(m) } label: { Label("제목", systemImage: "pencil") }.tint(.gray)
@@ -234,56 +347,50 @@ struct MeetingListView: View {
     // MARK: 툴바
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button { router.tab = .settings } label: { Image(systemName: "gearshape") }
+                .accessibilityLabel("설정")
+        }
         if config.isConfigured {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(selecting ? "완료" : "선택") {
-                    withAnimation { selecting.toggle(); multi.removeAll() }
-                }
-                .disabled(store.meetings.isEmpty)
-            }
             if !selecting {
-                if recorder.isActive && hsize == .regular {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { router.tab = .record } label: { Label("녹음 중", systemImage: "record.circle") }
-                            .tint(.red)
-                    }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("정렬 기준", selection: $store.sortKey) {
                             ForEach(SortKey.allCases) { Text($0.label).tag($0) }
                         }
                         Picker("순서", selection: $store.ascending) {
-                            Label("내림차순", systemImage: "arrow.down").tag(false)
-                            Label("오름차순", systemImage: "arrow.up").tag(true)
+                            Label("최근 것부터", systemImage: "arrow.down").tag(false)
+                            Label("오래된 것부터", systemImage: "arrow.up").tag(true)
                         }
-                        if hsize == .regular {
-                            Divider()
-                            Button { router.tab = .settings } label: { Label("설정", systemImage: "gearshape") }
-                        }
-                    } label: {
-                        Label("더 보기", systemImage: "ellipsis")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
+                        Divider()
                         Button { startRecording() } label: { Label("녹음하기", systemImage: "mic") }
-                        Button { importing = true } label: { Label("파일 추가", systemImage: "doc.badge.plus") }
+                        Button { importing = true } label: { Label("파일 올리기", systemImage: "square.and.arrow.up") }
                     } label: {
-                        Label("새 노트", systemImage: "plus")
+                        Image(systemName: "arrow.up.arrow.down")
+                    }
+                    .accessibilityLabel("정렬")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(selecting ? "완료" : "선택") {
+                    withAnimation { selecting.toggle(); multi.removeAll() }
+                }
+                .disabled(store.meetings.isEmpty)
+            }
+            if selecting {
+                ToolbarItem(placement: .bottomBar) {
+                    Button(multi.count == filtered.count ? "선택 해제" : "전체 선택") {
+                        multi = multi.count == filtered.count ? [] : Set(filtered.map(\.id))
                     }
                 }
-            } else {
+                ToolbarItem(placement: .status) {
+                    Text("\(multi.count)개 선택").font(.system(size: 14)).foregroundStyle(Color.mgFg2)
+                }
                 ToolbarItem(placement: .bottomBar) {
                     Button(role: .destructive) { confirmDelete = true } label: {
-                        Text(deleting ? "삭제 중..." : "\(multi.count)개 삭제")
+                        Text(deleting ? "삭제 중…" : "삭제").foregroundStyle(Color.mgDanger)
                     }
                     .disabled(multi.isEmpty || deleting)
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    Button(multi.count == store.meetings.count ? "전체 해제" : "전체 선택") {
-                        multi = multi.count == store.meetings.count ? [] : Set(store.meetings.map(\.id))
-                    }
                 }
             }
         }
@@ -367,32 +474,34 @@ struct MeetingRow: View {
     @EnvironmentObject private var device: OnDeviceJobCenter
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(meeting.title)
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(meeting.isDone ? Color.primary : Color.secondary)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(meeting.isDone ? Color.mgFg : Color.mgFg2)
                     .lineLimit(2)
-                Spacer(minLength: 8)
-                StatusBadge(status: meeting.status)
-            }
-            meta
-            if !meeting.tags.isEmpty {
-                TagRow(tags: meeting.tags)
+                Spacer(minLength: 4)
+                if meeting.status == "error" {
+                    Image(systemName: "exclamationmark.circle").foregroundStyle(Color.mgDanger).font(.system(size: 14))
+                }
             }
             if let job = device.job(for: meeting.id) {
                 DeviceJobLine(job: job)
             } else if meeting.isProcessing {
                 TranscribeProgressLine(meetingID: meeting.id)
+            } else if meeting.status == "error" {
+                Text("받아쓰기 실패\(meeting.errorMessage.map { " · \($0)" } ?? "")")
+                    .font(.system(size: 13.5)).foregroundStyle(Color.mgDanger).lineLimit(1)
+            } else {
+                meta
             }
-            if meeting.status == "error", let e = meeting.errorMessage {
-                Text("오류: \(e)").font(.caption).foregroundStyle(.red)
+            if !meeting.tags.isEmpty {
+                TagRow(tags: meeting.tags)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
     }
 
-    /// 한 줄: 녹음 시각 · 길이 (웹과 같음). 비용은 설정 > 사용량
     private var meta: some View {
         HStack(spacing: 10) {
             Text(Fmt.when(meeting.recordedOrCreated))
@@ -400,13 +509,15 @@ struct MeetingRow: View {
             if meeting.isCompressing {
                 HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("파일 준비 중") }
             } else if meeting.status == "pending" {
-                Text("받아쓰기 전").foregroundStyle(Color.accentMalgeul)
+                Text("받아쓰기 전").fontWeight(.medium).foregroundStyle(Color.accentMalgeul)
+            } else if meeting.isDone && meeting.aiAnalyzed == 0 {
+                Text("정리 중…")
             }
         }
         .lineLimit(1)
         .monospacedDigit()
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
+        .font(.system(size: 13.5))
+        .foregroundStyle(Color.mgFg3)
     }
 }
 
@@ -438,19 +549,15 @@ struct StatusBadge: View {
 struct TagRow: View {
     let tags: [String]
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(Array(tags.enumerated()), id: \.offset) { _, t in
-                    Text(t)
-                        .font(.footnote)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .foregroundStyle(.secondary)
-                        .background(Color(.tertiarySystemFill), in: Capsule())
-                }
+        HStack(spacing: 8) {
+            ForEach(Array(tags.prefix(3).enumerated()), id: \.offset) { (_: Int, t: String) in
+                Text("#\(t)")
             }
+            if tags.count > 3 { Text("+\(tags.count - 3)").foregroundStyle(Color.mgFg4) }
         }
-        .scrollDisabled(true)
-        .mask(LinearGradient(stops: [.init(color: .black, location: 0.85), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
+        .font(.system(size: 13.5))
+        .foregroundStyle(Color.mgFg2)
+        .lineLimit(1)
             }
 }
 
@@ -632,6 +739,17 @@ struct RecordedAtSheet: View {
                 self.error = "녹음 시각 변경 실패: \(error.localizedDescription)"
             }
             saving = false
+        }
+    }
+}
+
+enum ListFilter: Equatable {
+    case all, pending, tag(String)
+    var title: String {
+        switch self {
+        case .all: return "전체 노트"
+        case .pending: return "처리 전·중"
+        case .tag(let t): return "#\(t)"
         }
     }
 }

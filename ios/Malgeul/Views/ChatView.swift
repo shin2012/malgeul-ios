@@ -1,6 +1,12 @@
 import SwiftUI
 
-private let suggestions = ["주요 결정사항을 정리해줘", "액션 아이템과 담당자를 뽑아줘", "회의 요약을 3줄로 해줘", "다음 회의 안건으로 뭐가 좋을까?"]
+private let suggestions: [(String, String)] = [
+    ("결정 사항", "이 회의에서 결정된 사항을 정리해 줘"),
+    ("할 일과 담당자", "할 일과 담당자, 기한을 뽑아 줘"),
+    ("세 줄 요약", "회의 내용을 세 줄로 요약해 줘"),
+    ("남은 쟁점", "아직 결론이 나지 않은 쟁점을 정리해 줘"),
+    ("다음 회의 안건", "다음 회의 안건으로 무엇이 좋을지 제안해 줘"),
+]
 
 /// 회의 스크립트 기반 질문 (서버 LLM 체인, SSE 스트리밍). 대화 기록은 서버에 저장됨.
 struct ChatView: View {
@@ -42,10 +48,9 @@ struct ChatView: View {
                 }
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
             }
-            Divider()
             inputBar
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.mgBg)
         .task(id: meetingID) { await loadHistory() }
         .onDisappear { streamTask?.cancel() }
         .confirmationDialog("대화 기록을 모두 지울까요?", isPresented: $confirmClear, titleVisibility: .visible) {
@@ -77,20 +82,23 @@ struct ChatView: View {
     }
 
     private var empty: some View {
-        VStack(spacing: 12) {
-            Text("✦").font(.title).foregroundStyle(.accentMalgeul)
-            Text("회의 스크립트에 대해 무엇이든 물어보세요").font(.subheadline).foregroundStyle(.secondary)
-            VStack(spacing: 8) {
-                ForEach(suggestions, id: \.self) { s in
-                    Button { send(s) } label: {
-                        Text(s).font(.subheadline).frame(maxWidth: .infinity, alignment: .leading)
+        VStack(spacing: 4) {
+            Text("이 회의에 대해 물어보세요").font(.system(size: 16, weight: .semibold)).foregroundStyle(Color.mgFg)
+            Text("대화 내용을 바탕으로 답합니다.").font(.system(size: 14)).foregroundStyle(Color.mgFg3).padding(.bottom, 14)
+            FlowLayout(spacing: 8) {
+                ForEach(suggestions, id: \.0) { (s: (String, String)) in
+                    Button { send(s.1) } label: {
+                        Text(s.0).font(.system(size: 14)).foregroundStyle(Color.mgFg2)
+                            .padding(.horizontal, 14).frame(height: 36)
+                            .overlay(Capsule().stroke(Color.mgLine2, lineWidth: 1))
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
                 }
             }
+            .frame(maxWidth: 420)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 30)
+        .padding(.top, 44)
     }
 
     @ViewBuilder private func bubble(_ m: ChatMessage) -> some View {
@@ -98,10 +106,11 @@ struct ChatView: View {
             HStack {
                 Spacer(minLength: 40)
                 Text(m.text)
+                    .font(.system(size: 15))
                     .textSelection(.enabled)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .foregroundStyle(.white)
-                    .background(Color.accentMalgeul, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .foregroundStyle(Color.mgFg)
+                    .background(Color.mgBg3, in: UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 4, topTrailingRadius: 16, style: .continuous))
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {
@@ -111,9 +120,8 @@ struct ChatView: View {
                     MarkdownText(text: m.text)
                 }
             }
-            .padding(12)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .contextMenu {
                 Button { UIPasteboard.general.string = m.text } label: { Label("복사", systemImage: "doc.on.doc") }
                 ShareLink(item: m.text)
@@ -124,22 +132,35 @@ struct ChatView: View {
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField("무엇이든 물어보세요", text: $input, axis: .vertical)
+                .font(.system(size: 16))
                 .lineLimit(1...6)
                 .focused($focused)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .padding(.vertical, 7)
                 .onSubmit { send(nil) }
                 .submitLabel(.send)
             Button { send(nil) } label: {
-                Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(canSend ? Color.accentMalgeul : Color.mgLine2)
+                        .frame(width: 36, height: 36)
+                    if sending { ProgressView().tint(.white).controlSize(.small) }
+                    else { Image(systemName: "arrow.up").font(.system(size: 16, weight: .bold)).foregroundStyle(.white) }
+                }
             }
-            .disabled(sending || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityLabel("전송")
+            .buttonStyle(.plain)
+            .disabled(!canSend)
+            .accessibilityLabel("보내기")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
+        .padding(.leading, 14).padding(.trailing, 6).padding(.vertical, 6)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(focused ? Color.accentMalgeul : Color.mgLine2, lineWidth: 1))
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
+        .background(Color.mgBg)
     }
+
+    private var canSend: Bool { !sending && !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     private func loadHistory() async {
         do {

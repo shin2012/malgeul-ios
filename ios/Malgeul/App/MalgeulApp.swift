@@ -81,6 +81,7 @@ struct MalgeulApp: App {
                 .environmentObject(device)
                 .environmentObject(voices)
                 .tint(.accentMalgeul)
+                .preferredColorScheme(.light)
                 .onOpenURL(perform: handle)
         }
     }
@@ -132,36 +133,14 @@ struct RootView: View {
             .modifier(RootAlerts())
     }
 
-    @ViewBuilder private var root: some View {
-        if hsize == .regular {
-            MeetingsSplitView()
-                .sheet(isPresented: Binding(get: { router.tab == .record }, set: { if !$0 { router.tab = .meetings } })) {
-                    RecordTabView()
-                }
-                .sheet(isPresented: Binding(get: { router.tab == .settings }, set: { if !$0 { router.tab = .meetings } })) {
-                    SettingsView()
-                }
-        } else {
-            tabs
-        }
-    }
-
-    private var tabs: some View {
-        TabView(selection: $router.tab) {
-            Tab("노트", systemImage: "text.bubble", value: AppTab.meetings) {
-                MeetingsSplitView()
-            }
-            .badge(uploads.jobs.filter { $0.state != .failed }.count)
-
-            Tab("녹음", systemImage: recorder.isActive ? "record.circle.fill" : "mic", value: AppTab.record) {
+    private var root: some View {
+        MeetingsSplitView()
+            .sheet(isPresented: Binding(get: { router.tab == .record }, set: { if !$0 { router.tab = .meetings } })) {
                 RecordTabView()
             }
-            .badge(recorder.isActive ? Text("●") : nil)
-
-            Tab("설정", systemImage: "gearshape", value: AppTab.settings) {
+            .sheet(isPresented: Binding(get: { router.tab == .settings }, set: { if !$0 { router.tab = .meetings } })) {
                 SettingsView()
             }
-        }
     }
 }
 
