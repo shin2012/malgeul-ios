@@ -136,6 +136,62 @@ final class API {
         sse(path: "transcribe/progress/\(id)", method: "GET", json: nil)
     }
 
+    // MARK: 기기 받아쓰기
+
+    /// 기기 받아쓰기 결과 저장. replace=true면 이미 받아쓴 회의도 덮어씀(서버가 이전 대본 보관)
+    func submitDeviceResult(_ id: Int, segments: [DeviceSegment], duration: Double, engine: String,
+                            speakerMode: SpeakerMode, voice: [String: Any]?, replace: Bool) async throws {
+        var body: [String: Any] = ["id": id, "segments": segments.map(\.json), "duration_seconds": Int(duration.rounded()),
+                                   "engine": engine, "speaker_mode": speakerMode.rawValue, "replace": replace]
+        if let voice { body["voice"] = voice }
+        var r = try request("transcribe/device-result", method: "POST", json: body)
+        r.timeoutInterval = 120
+        let (d, resp) = try await session.data(for: r)
+        try Self.check(resp, d)
+    }
+
+    /// 웹·다른 기기에서도 진행률이 보이게 (실패해도 무시)
+    func deviceProgress(_ id: Int, pct: Double?, message: String?, done: Bool = false) async {
+        var body: [String: Any] = ["id": id, "done": done]
+        if let pct { body["pct"] = Int(pct * 100) }
+        if let message { body["message"] = message }
+        _ = try? await data("transcribe/device-progress", method: "POST", json: body)
+    }
+
+    struct VoicePerson: Decodable { let key: String; let name: String; let clips: Int; let seconds: Int }
+    struct VoiceProfilesResponse: Decodable { let version: String; let people: [VoicePerson] }
+
+    func voiceProfiles(exclude: Int?) async throws -> VoiceProfilesResponse {
+        try decode(VoiceProfilesResponse.self, try await data("voice/profiles" + (exclude.map { "?exclude=\($0)" } ?? "")))
+    }
+
+    /// 인물 참고 음성(16kHz wav) 내려받기
+    func voicePersonAudio(key: String, exclude: Int?) async throws -> URL {
+        var c = URLComponents()
+        c.queryItems = [URLQueryItem(name: "key", value: key)] + (exclude.map { [URLQueryItem(name: "exclude", value: String($0))] } ?? [])
+        var r = try request("voice/person-audio" + (c.percentEncodedQuery.map { "?" + $0 } ?? ""))
+        r.timeoutInterval = 180
+        let (tmp, resp) = try await session.download(for: r)
+        if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) { throw APIError.http(h.statusCode, "") }
+        let out = FileManager.default.temporaryDirectory.appending(path: "voice-\(UUID().uuidString).wav")
+        try FileManager.default.moveItem(at: tmp, to: out)
+        return out
+    }
+
+    /// 기기에서 계산한 목소리 점수로 화자 다시 추정
+    func rerunSpeakerIDWithVoice(_ id: Int, mode: SpeakerMode, voice: [String: Any]) async throws {
+        try await data("meetings/\(id)/speaker-id", method: "POST", json: ["mode": mode.rawValue, "voice": voice])
+    }
+
+    /// 시험용 복제(오디오만 복사, 대본 없음)
+    func cloneMeeting(_ id: Int, prefix: String) async throws -> Int {
+        let d = try await data("meetings/\(id)/clone", method: "POST", json: ["prefix": prefix])
+        guard let o = try JSONSerialization.jsonObject(with: d) as? [String: Any], let n = (o["id"] as? NSNumber)?.intValue else {
+            throw APIError.badResponse
+        }
+        return n
+    }
+
     // MARK: 채팅
 
     func chatHistory(_ id: Int) async throws -> [ChatMessage] {

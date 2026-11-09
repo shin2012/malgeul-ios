@@ -3,6 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var config: AppConfig
     @EnvironmentObject private var store: MeetingStore
+    @EnvironmentObject private var device: OnDeviceJobCenter
+    @EnvironmentObject private var voices: VoiceProfiles
 
     @State private var server = ""
     @State private var token = ""
@@ -65,6 +67,8 @@ struct SettingsView: View {
                     Toggle("녹음 업로드 후 바로 받아쓰기", isOn: $config.autoTranscribeRecordings)
                     Toggle("업로드가 끝난 녹음은 기기에서 지우기", isOn: $config.deleteAfterUpload)
                 }
+
+                ProcessingSection()
 
                 Section("정보") {
                     LabeledContent("버전", value: "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")

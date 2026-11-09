@@ -7,6 +7,7 @@ struct MeetingDetailView: View {
     @EnvironmentObject private var store: MeetingStore
     @EnvironmentObject private var player: AudioPlayer
     @EnvironmentObject private var router: Router
+    @EnvironmentObject private var device: OnDeviceJobCenter
     @Environment(\.horizontalSizeClass) private var hsize
     @AppStorage("mt_chat_open") private var chatOpenPref = true
     @StateObject private var doc = DocModel()
@@ -18,6 +19,7 @@ struct MeetingDetailView: View {
     @State private var rename: Segment?
     @State private var newName = ""
     @State private var search = ""
+    @State private var confirmRedo = false
 
     private var segments: [Segment] { detail?.segments ?? [] }
     private var speakers: [String] {
@@ -52,6 +54,20 @@ struct MeetingDetailView: View {
         .toolbar {
             if detail?.meeting.isDone == true {
                 ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if AppConfig.deviceTranscribeAvailable {
+                            Button { confirmRedo = true } label: { Label("이 기기에서 다시 받아쓰기", systemImage: "iphone.and.arrow.forward") }
+                        }
+                        Button {
+                            device.requestNotificationPermission()
+                            device.enqueueSpeakers(meetingID: meetingID, title: detail?.meeting.title ?? "")
+                        } label: { Label("기기 목소리로 화자 다시 추정", systemImage: "person.wave.2") }
+                    } label: {
+                        Label("기기 처리", systemImage: device.job(for: meetingID) == nil ? "iphone" : "iphone.badge.play")
+                    }
+                    .disabled(device.job(for: meetingID).map { $0.state != .failed } ?? false)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showDoc = true } label: {
                         Label("문서", systemImage: doc.busy ? "doc.badge.clock" : "doc.text")
                     }
@@ -67,6 +83,21 @@ struct MeetingDetailView: View {
                 }
             }
         }
+        .confirmationDialog("이 기기에서 다시 받아쓸까요?", isPresented: $confirmRedo, titleVisibility: .visible) {
+            Button("다시 받아쓰기") {
+                device.requestNotificationPermission()
+                device.enqueueTranscribe(meetingID: meetingID, title: detail?.meeting.title ?? "", replace: true)
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("지금 대본과 고친 화자 이름이 새 결과로 바뀝니다. 이전 대본은 서버에 보관돼요.")
+        }
+        .safeAreaInset(edge: .top) {
+            if let j = device.job(for: meetingID) {
+                DeviceJobLine(job: j).padding(.horizontal).padding(.vertical, 6).background(.bar)
+            }
+        }
+        .onChange(of: device.jobs.count) { _, _ in Task { await load() } }
         .sheet(isPresented: $showDoc) {
             DocPanelView(meetingID: meetingID, doc: doc)
                 .presentationDetents([.medium, .large])

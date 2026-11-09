@@ -24,6 +24,7 @@ struct MeetingListView: View {
     @EnvironmentObject private var store: MeetingStore
     @EnvironmentObject private var router: Router
     @EnvironmentObject private var uploads: UploadCenter
+    @EnvironmentObject private var device: OnDeviceJobCenter
 
     @State private var search = ""
     @State private var selecting = false
@@ -81,7 +82,9 @@ struct MeetingListView: View {
                           allowsMultipleSelection: true) { result in
                 if case .success(let urls) = result { urls.forEach { uploads.enqueueImported($0) } }
             }
-            .task(id: config.token) { if config.isConfigured { await store.refresh() } }
+            .task(id: config.token) {
+                if config.isConfigured { await store.refresh(); device.resume() }
+            }
     }
 
     private func dialogs1<V: View>(_ v: V) -> some View {
@@ -89,8 +92,10 @@ struct MeetingListView: View {
             .confirmationDialog("아직 받아쓰기가 되지 않았습니다. 방식을 선택해주세요.",
                                 isPresented: Binding(get: { askTranscribe != nil }, set: { if !$0 { askTranscribe = nil } }),
                                 titleVisibility: .visible, presenting: askTranscribe) { (m: Meeting) in
-                Button("AssemblyAI") { transcribe(m, local: false) }
-                Button("🖥 로컬") { transcribe(m, local: true) }
+                // 설정의 기본 방식이 맨 위
+                ForEach(engineOrder, id: \.self) { (e: TranscribeEngine) in
+                    Button(engineButton(e)) { transcribe(m, engine: e) }
+                }
                 Button("취소", role: .cancel) {}
             }
             .alert("파일 압축 처리 중입니다. 잠시 후 다시 시도해주세요.", isPresented: $compressingAlert) {
@@ -251,16 +256,36 @@ struct MeetingListView: View {
         router.startRecordingRequest = true
     }
 
+    private var engineOrder: [TranscribeEngine] {
+        var all: [TranscribeEngine] = AppConfig.deviceTranscribeAvailable ? [.device, .assemblyai, .local] : [.assemblyai, .local]
+        if let i = all.firstIndex(of: config.engine) { all.insert(all.remove(at: i), at: 0) }
+        return all
+    }
+
+    private func engineButton(_ e: TranscribeEngine) -> String {
+        switch e {
+        case .assemblyai: return "AssemblyAI"
+        case .local: return "🖥 로컬"
+        case .device: return "📱 이 기기에서"
+        }
+    }
+
     private func tapUnfinished(_ m: Meeting) {
+        if device.job(for: m.id).map({ $0.state != .failed }) == true { return }
         if m.isProcessing { return }
         if m.isCompressing { compressingAlert = true; return }
         askTranscribe = m
     }
 
-    private func transcribe(_ m: Meeting, local: Bool) {
+    private func transcribe(_ m: Meeting, engine: TranscribeEngine) {
+        if engine == .device {
+            device.requestNotificationPermission()
+            device.enqueueTranscribe(meetingID: m.id, title: m.title)
+            return
+        }
         Task {
             do {
-                try await API.shared.startTranscribe(m.id, local: local)
+                try await API.shared.startTranscribe(m.id, local: engine == .local)
                 store.patch(m.id) { $0.status = "processing"; $0.errorMessage = nil }
             } catch {
                 errorText = error.localizedDescription
@@ -299,6 +324,7 @@ struct MeetingListView: View {
 struct MeetingRow: View {
     let meeting: Meeting
     @EnvironmentObject private var store: MeetingStore
+    @EnvironmentObject private var device: OnDeviceJobCenter
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -315,7 +341,9 @@ struct MeetingRow: View {
                 Text(f).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             meta
-            if meeting.isProcessing {
+            if let job = device.job(for: meeting.id) {
+                DeviceJobLine(job: job)
+            } else if meeting.isProcessing {
                 TranscribeProgressLine(meetingID: meeting.id)
             }
             if meeting.status == "error", let e = meeting.errorMessage {
@@ -436,6 +464,38 @@ struct TranscribeProgressLine: View {
                 if error.isCancellation { return }
                 try? await Task.sleep(for: .seconds(3))
             }
+        }
+    }
+}
+
+/// 기기 받아쓰기·화자 추정 진행 + 취소/다시 시도
+struct DeviceJobLine: View {
+    let job: DeviceJob
+    @EnvironmentObject private var device: OnDeviceJobCenter
+    @State private var confirmCancel = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if job.state == .failed {
+                Text("기기 처리 실패: \(job.message ?? "")").font(.caption).foregroundStyle(.red)
+                HStack {
+                    Button("다시 시도") { device.retry(job.id) }.buttonStyle(.bordered).controlSize(.small)
+                    Button("지우기", role: .destructive) { device.cancel(job.id) }.buttonStyle(.bordered).controlSize(.small)
+                }
+            } else {
+                ProgressView(value: job.state == .queued ? 0 : job.progress).progressViewStyle(.linear)
+                HStack {
+                    Image(systemName: "iphone").font(.caption2).foregroundStyle(.secondary)
+                    Text(job.state == .queued ? "기기 처리 대기 중" : "\(job.message ?? "처리 중") \(Int(job.progress * 100))%")
+                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    Spacer()
+                    Button("취소", role: .destructive) { confirmCancel = true }
+                        .font(.caption).buttonStyle(.borderless)
+                }
+            }
+        }
+        .confirmationDialog("기기 처리를 취소할까요?", isPresented: $confirmCancel, titleVisibility: .visible) {
+            Button("처리 취소", role: .destructive) { device.cancel(job.id) }
         }
     }
 }

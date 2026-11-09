@@ -134,6 +134,7 @@ pbx = f"""// !$*UTF8*$!
 
 /* Begin PBXBuildFile section */
 \t\t{I(0x30)} /* MalgeulShare.appex in Embed Foundation Extensions */ = {{isa = PBXBuildFile; fileRef = {I(0x20)} /* MalgeulShare.appex */; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy, ); }}; }};
+\t\t{I(0x51)} /* FluidAudio in Frameworks */ = {{isa = PBXBuildFile; productRef = {I(0x52)} /* FluidAudio */; }};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -184,7 +185,7 @@ pbx = f"""// !$*UTF8*$!
 /* End PBXTargetDependency section */
 
 /* Begin PBXFrameworksBuildPhase section */
-{phase(I(0x03), "PBXFrameworksBuildPhase", "Frameworks")}
+{phase(I(0x03), "PBXFrameworksBuildPhase", "Frameworks", f"\t\t\t\t{I(0x51)} /* FluidAudio in Frameworks */,\n")}
 {phase(I(0x23), "PBXFrameworksBuildPhase", "Frameworks")}
 /* End PBXFrameworksBuildPhase section */
 
@@ -243,6 +244,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t);
 \t\t\tname = Malgeul;
 \t\t\tpackageProductDependencies = (
+\t\t\t\t{I(0x52)} /* FluidAudio */,
 \t\t\t);
 \t\t\tproductName = Malgeul;
 \t\t\tproductReference = {I(0x01)} /* Malgeul.app */;
@@ -298,6 +300,9 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t);
 \t\t\tmainGroup = {I(0x04)};
 \t\t\tminimizedProjectReferenceProxies = 1;
+\t\t\tpackageReferences = (
+\t\t\t\t{I(0x50)} /* XCRemoteSwiftPackageReference "FluidAudio" */,
+\t\t\t);
 \t\t\tpreferredProjectObjectVersion = 77;
 \t\t\tproductRefGroup = {I(0x05)} /* Products */;
 \t\t\tprojectDirPath = "";
@@ -357,6 +362,25 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tdefaultConfigurationName = Release;
 \t\t}};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+\t\t{I(0x50)} /* XCRemoteSwiftPackageReference "FluidAudio" */ = {{
+\t\t\tisa = XCRemoteSwiftPackageReference;
+\t\t\trepositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+\t\t\trequirement = {{
+\t\t\t\tkind = exactVersion;
+\t\t\t\tversion = 0.9.1;
+\t\t\t}};
+\t\t}};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+\t\t{I(0x52)} /* FluidAudio */ = {{
+\t\t\tisa = XCSwiftPackageProductDependency;
+\t\t\tpackage = {I(0x50)} /* XCRemoteSwiftPackageReference "FluidAudio" */;
+\t\t\tproductName = FluidAudio;
+\t\t}};
+/* End XCSwiftPackageProductDependency section */
 \t}};
 \trootObject = {I(0x09)} /* Project object */;
 }}

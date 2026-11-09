@@ -59,6 +59,8 @@ struct MalgeulApp: App {
     @StateObject private var recorder = Recorder.shared
     @StateObject private var recordings = RecordingStore.shared
     @StateObject private var player = AudioPlayer.shared
+    @StateObject private var device = OnDeviceJobCenter.shared
+    @StateObject private var voices = VoiceProfiles.shared
 
     init() {
         #if DEBUG
@@ -76,6 +78,8 @@ struct MalgeulApp: App {
                 .environmentObject(recorder)
                 .environmentObject(recordings)
                 .environmentObject(player)
+                .environmentObject(device)
+                .environmentObject(voices)
                 .tint(.accentMalgeul)
                 .onOpenURL(perform: handle)
         }
@@ -110,6 +114,7 @@ struct RootView: View {
     @EnvironmentObject private var recorder: Recorder
     @EnvironmentObject private var uploads: UploadCenter
     @EnvironmentObject private var player: AudioPlayer
+    @EnvironmentObject private var device: OnDeviceJobCenter
 
     var body: some View {
         TabView(selection: $router.tab) {
@@ -132,7 +137,12 @@ struct RootView: View {
             // 앱으로 돌아오면 목록을 새로 받음 (다른 기기·웹에서 바뀐 내용 반영)
             guard phase == .active else { return }
             recordings.reload()
-            if config.isConfigured { Task { await store.refresh() } }
+            if config.isConfigured {
+                Task {
+                    await store.refresh()
+                    OnDeviceJobCenter.shared.resume()   // 공유 확장이 맡긴 기기 받아쓰기·멈춘 작업 이어서
+                }
+            }
         }
         .alert("중복 파일", isPresented: Binding(get: { uploads.duplicateTitle != nil }, set: { if !$0 { uploads.duplicateTitle = nil } })) {
             Button("확인", role: .cancel) { uploads.duplicateTitle = nil }
@@ -143,6 +153,11 @@ struct RootView: View {
             Button("확인", role: .cancel) { uploads.errorAlert = nil }
         } message: {
             Text(uploads.errorAlert ?? "")
+        }
+        .alert("기기 처리", isPresented: Binding(get: { device.lastError != nil }, set: { if !$0 { device.lastError = nil } })) {
+            Button("확인", role: .cancel) { device.lastError = nil }
+        } message: {
+            Text(device.lastError ?? "")
         }
         .alert("재생", isPresented: Binding(get: { player.lastError != nil }, set: { if !$0 { player.lastError = nil } })) {
             Button("확인", role: .cancel) { player.lastError = nil }

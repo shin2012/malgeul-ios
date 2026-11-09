@@ -42,6 +42,7 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
     var close: () -> Void = {}
 
     var configured: Bool { SharedSettings.isConfigured }
+    let deviceMode = TranscribeEngine.current == .device
 
     private static let types = [UTType.audio, UTType.movie, UTType.audiovisualContent]
 
@@ -120,7 +121,8 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
                 phase = .failed(results.joined(separator: "\n"))
             } else {
                 phase = .done
-                status = autoTranscribe ? "보냈어요. 서버 압축이 끝나면 받아쓰기가 시작됩니다." : "보냈어요. 말글 앱에서 받아쓰기를 시작하세요."
+                status = !autoTranscribe ? "보냈어요. 말글 앱에서 받아쓰기를 시작하세요."
+                    : (deviceMode ? "보냈어요. 말글 앱을 열면 이 기기에서 받아쓰기가 시작됩니다." : "보냈어요. 서버 압축이 끝나면 받아쓰기가 시작됩니다.")
                 try? await Task.sleep(for: .seconds(1.6))
                 close()
             }
@@ -155,7 +157,8 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
         let body = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).body")
         defer { try? FileManager.default.removeItem(at: body) }
         let boundary = "malgeul-\(UUID().uuidString)"
-        let fields = autoTranscribe ? ["auto_transcribe": "1"] : [:]
+        // 받아쓰기 방식이 '이 기기'면 서버 자동 받아쓰기 대신 대기 목록에 넣고 앱이 열릴 때 처리
+        let fields = autoTranscribe && !deviceMode ? ["auto_transcribe": "1"] : [:]
         let src = f.url
         try await Task.detached(priority: .userInitiated) {
             try UploadKit.writeMultipart(source: src, filename: name, fields: fields, boundary: boundary, to: body)
@@ -169,6 +172,7 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
         if o?["duplicate"] as? Bool == true {
             return "이미 같은 파일이 있습니다: \(((o?["existing"] as? [String: Any])?["title"] as? String) ?? "")"
         }
+        if autoTranscribe && deviceMode, let id = (o?["id"] as? NSNumber)?.intValue { DeviceQueue.add(id) }
         return (o?["title"] as? String) ?? name
     }
 
@@ -225,7 +229,8 @@ struct ShareView: View {
                     }
                 }
                 Section {
-                    Toggle("업로드 후 바로 받아쓰기 (AssemblyAI)", isOn: $model.autoTranscribe)
+                    Toggle(model.deviceMode ? "업로드 후 이 기기에서 받아쓰기 (말글 앱을 열면 시작)" : "업로드 후 바로 받아쓰기 (AssemblyAI)",
+                           isOn: $model.autoTranscribe)
                 } footer: {
                     Text("다 보낼 때까지 이 화면을 열어 두세요. 큰 파일은 Tailscale에 연결되어 있을 때만 올릴 수 있어요(100MB 초과).")
                 }

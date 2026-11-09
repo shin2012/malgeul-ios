@@ -66,6 +66,44 @@ enum SharedSettings {
     }
 }
 
+/// 받아쓰기 방식 (앱 설정, 공유 확장도 읽음)
+enum TranscribeEngine: String, CaseIterable, Identifiable {
+    case assemblyai, local, device
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .assemblyai: return "서버 (AssemblyAI)"
+        case .local: return "서버 (로컬)"
+        case .device: return "이 기기"
+        }
+    }
+    static var current: TranscribeEngine { TranscribeEngine(rawValue: Keychain.get("engine") ?? "") ?? .assemblyai }
+}
+
+/// 공유 확장이 올린 회의 중 '기기에서 받아쓰기' 대기 목록 (앱이 열리면 처리). App Group 없이 공유 키체인에 작은 JSON으로
+enum DeviceQueue {
+    static func all() -> [Int] {
+        guard let s = Keychain.get("deviceQueue"), let d = s.data(using: .utf8),
+              let a = try? JSONDecoder().decode([Int].self, from: d) else { return [] }
+        return a
+    }
+    static func add(_ id: Int) {
+        var a = all()
+        guard !a.contains(id) else { return }
+        a.append(id)
+        save(a)
+    }
+    static func take() -> [Int] {
+        let a = all()
+        if !a.isEmpty { save([]) }
+        return a
+    }
+    private static func save(_ a: [Int]) {
+        let s = (try? JSONEncoder().encode(a)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        Keychain.set(a.isEmpty ? "" : s, for: "deviceQueue")
+    }
+}
+
 /// 업로드 공용 도구: 해시·멀티파트 본문·경로 선택
 enum UploadKit {
     static let hundredMB: Int64 = 100 * 1024 * 1024

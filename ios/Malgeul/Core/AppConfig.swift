@@ -1,5 +1,20 @@
 import Foundation
 
+/// 기기 받아쓰기 후 화자 추정
+enum SpeakerMode: String, CaseIterable, Identifiable {
+    case server, device, hybrid, off
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .server: return "서버 (목소리+내용)"
+        case .device: return "이 기기 (목소리)"
+        case .hybrid: return "기기 목소리 + 서버 내용"
+        case .off: return "하지 않음"
+        }
+    }
+    var usesDeviceVoice: Bool { self == .device || self == .hybrid }
+}
+
 /// 서버 주소·앱 토큰·앱 옵션. 토큰은 키체인, 나머지는 UserDefaults.
 @MainActor
 final class AppConfig: ObservableObject {
@@ -17,6 +32,23 @@ final class AppConfig: ObservableObject {
     @Published var autoTranscribeRecordings: Bool { didSet { UserDefaults.standard.set(autoTranscribeRecordings, forKey: "autoTranscribe") } }
     /// 업로드가 끝난 녹음 파일을 기기에서 지울지
     @Published var deleteAfterUpload: Bool { didSet { UserDefaults.standard.set(deleteAfterUpload, forKey: "deleteAfterUpload") } }
+    /// 받아쓰기 방식 (공유 확장도 읽도록 키체인)
+    @Published var engine: TranscribeEngine { didSet { Keychain.set(engine.rawValue, for: "engine") } }
+    /// 기기 받아쓰기 때 화자 추정 방식
+    @Published var speakerMode: SpeakerMode { didSet { UserDefaults.standard.set(speakerMode.rawValue, forKey: "speakerMode") } }
+    /// 기기 목소리 판정 기준 (기기 임베딩 모델은 서버와 달라 따로 맞춤)
+    @Published var voiceStrong: Double { didSet { UserDefaults.standard.set(voiceStrong, forKey: "voiceStrong") } }
+    @Published var voiceWeak: Double { didSet { UserDefaults.standard.set(voiceWeak, forKey: "voiceWeak") } }
+    @Published var voiceMargin: Double { didSet { UserDefaults.standard.set(voiceMargin, forKey: "voiceMargin") } }
+
+    static let defaultVoice = (strong: 0.75, weak: 0.55, margin: 0.15)
+    var voiceThresholds: [String: Double] { ["strong": voiceStrong, "weak": voiceWeak, "margin": voiceMargin] }
+
+    /// 기기 받아쓰기 가능 여부 (iOS 26+)
+    static var deviceTranscribeAvailable: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -25,6 +57,12 @@ final class AppConfig: ObservableObject {
         token = Keychain.get("appToken") ?? ""
         autoTranscribeRecordings = d.object(forKey: "autoTranscribe") as? Bool ?? false
         deleteAfterUpload = d.object(forKey: "deleteAfterUpload") as? Bool ?? false
+        let e = TranscribeEngine.current
+        engine = (e == .device && !AppConfig.deviceTranscribeAvailable) ? .assemblyai : e
+        speakerMode = SpeakerMode(rawValue: d.string(forKey: "speakerMode") ?? "") ?? .server
+        voiceStrong = d.object(forKey: "voiceStrong") as? Double ?? AppConfig.defaultVoice.strong
+        voiceWeak = d.object(forKey: "voiceWeak") as? Double ?? AppConfig.defaultVoice.weak
+        voiceMargin = d.object(forKey: "voiceMargin") as? Double ?? AppConfig.defaultVoice.margin
     }
 
     var isConfigured: Bool {

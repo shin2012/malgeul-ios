@@ -16,6 +16,8 @@ struct UploadJob: Codable, Identifiable, Equatable {
     var autoTranscribe = false
     var recordingID: String?
     var removeSourceWhenDone = false
+    /// 업로드가 끝나면 이 기기에서 받아쓰기 (설정 '받아쓰기 방식 = 이 기기')
+    var deviceTranscribe: Bool?
 
     var sourceURL: URL { URL(fileURLWithPath: NSHomeDirectory()).appending(path: sourceRelPath) }
     var title: String { (filename as NSString).deletingPathExtension }
@@ -112,8 +114,10 @@ final class UploadCenter: NSObject, ObservableObject {
         let home = URL(fileURLWithPath: NSHomeDirectory()).standardizedFileURL.path
         var rel = file.standardizedFileURL.path
         if rel.hasPrefix(home) { rel = String(rel.dropFirst(home.count)) }
-        let job = UploadJob(sourceRelPath: rel, filename: filename, recordedAt: recordedAt, autoTranscribe: autoTranscribe,
-                            recordingID: recordingID, removeSourceWhenDone: removeSource)
+        // 받아쓰기 방식이 '이 기기'면 서버 자동 받아쓰기 대신 업로드 후 기기에서
+        let device = autoTranscribe && AppConfig.shared.engine == .device && AppConfig.deviceTranscribeAvailable
+        let job = UploadJob(sourceRelPath: rel, filename: filename, recordedAt: recordedAt, autoTranscribe: autoTranscribe && !device,
+                            recordingID: recordingID, removeSourceWhenDone: removeSource, deviceTranscribe: device ? true : nil)
         jobs.insert(job, at: 0)
         save()
         start(job.id)
@@ -224,6 +228,10 @@ final class UploadCenter: NSObject, ObservableObject {
             return
         }
         if let rid = job.recordingID { RecordingStore.shared.markUploaded(rid, meetingID: meetingID) }
+        if job.deviceTranscribe == true {
+            OnDeviceJobCenter.shared.enqueueTranscribe(meetingID: meetingID, title: (obj["title"] as? String) ?? job.title,
+                                                       localFile: job.sourceURL)
+        }
         finish(id, removeSource: true)
         Task { await MeetingStore.shared.refresh() }
     }
