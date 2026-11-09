@@ -52,6 +52,9 @@ final class OnDeviceJobCenter: ObservableObject {
     @Published private(set) var jobs: [DeviceJob] = []
     @Published var lastReport: DeviceRunReport?
     @Published var lastError: String?
+    /// 방금 끝난 작업 (회의 id, 서버에 보내기 직전 시각) — 상세 화면이 화자 식별 결과를 기다렸다가 대본을 다시 불러옴
+    struct Finished: Equatable { var meetingID: Int; var submittedAt: Date }
+    @Published private(set) var finished: Finished?
 
     private var worker: Task<Void, Never>?
     private var bgTask: AnyObject?          // BGContinuedProcessingTask (iOS 26)
@@ -173,6 +176,7 @@ final class OnDeviceJobCenter: ObservableObject {
         save()
         beginBackground(job)
         defer { endBackground() }
+        let started = Date()
         do {
             switch job.kind {
             case .transcribe: try await runTranscribe(job)
@@ -181,6 +185,7 @@ final class OnDeviceJobCenter: ObservableObject {
             await API.shared.deviceProgress(job.meetingID, pct: nil, message: nil, done: true)
             notify(title: job.kind == .transcribe ? "기기 받아쓰기 완료" : "기기 화자 추정 요청 완료", body: job.title)
             remove(id)
+            finished = Finished(meetingID: job.meetingID, submittedAt: started)
             await MeetingStore.shared.refresh()
         } catch {
             await API.shared.deviceProgress(job.meetingID, pct: nil, message: nil, done: true)

@@ -97,7 +97,13 @@ struct MeetingDetailView: View {
                 DeviceJobLine(job: j).padding(.horizontal).padding(.vertical, 6).background(.bar)
             }
         }
-        .onChange(of: device.jobs.count) { _, _ in Task { await load() } }
+        .onChange(of: device.finished) { _, f in
+            guard let f, f.meetingID == meetingID else { return }
+            Task {
+                await load()
+                await doc.watchSpeaker(since: f.submittedAt)
+            }
+        }
         .sheet(isPresented: $showDoc) {
             DocPanelView(meetingID: meetingID, doc: doc)
                 .presentationDetents([.medium, .large])
@@ -118,6 +124,8 @@ struct MeetingDetailView: View {
             if router.debugOpenDoc { router.debugOpenDoc = false; showDoc = true }
             doc.onSpeakerFinished = { Task { await load() } }
             await doc.start(meetingID)
+            // 받아쓴 지 얼마 안 됐으면 서버 화자 식별이 끝날 때까지 지켜봄(끝나면 이름 반영)
+            if let t = detail?.meeting.transcribedAt, Date().timeIntervalSince(t) < 240 { await doc.watchSpeaker(since: t) }
         }
         .onDisappear { player.stop(); doc.stop() }
     }

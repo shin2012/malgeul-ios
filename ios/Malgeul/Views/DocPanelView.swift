@@ -11,8 +11,18 @@ final class DocModel: ObservableObject {
     private var meetingID = 0
     private var pollTask: Task<Void, Never>?
     private var prevSpeakerStatus: String?
+    /// 받아쓰기 직후: 서버 화자 식별이 (제목 분석 뒤에) 끝날 때까지 기다림 — 이 시각 이후 결과가 나오면 대본 다시 불러옴
+    private var waitingSince: Date?
+    private var waitDeadline = Date.distantPast
 
-    var busy: Bool { report?.status == "processing" || speaker?.status == "processing" }
+    var busy: Bool { report?.status == "processing" || speaker?.status == "processing" || waitingSince != nil }
+
+    /// 기기 받아쓰기·화자 재추정 직후 호출
+    func watchSpeaker(since: Date) async {
+        waitingSince = since
+        waitDeadline = Date().addingTimeInterval(240)
+        await refresh()
+    }
 
     func start(_ id: Int) async {
         meetingID = id
@@ -29,9 +39,15 @@ final class DocModel: ObservableObject {
         if let rr { report = rr }
         if let ss {
             if prevSpeakerStatus == "processing", let st = ss.status, st != "processing" { onSpeakerFinished?() }
+            else if let since = waitingSince, let st = ss.status, st != "processing",
+                    let at = ss.result?["at"]?.string.flatMap(DateParse.iso), at >= since.addingTimeInterval(-5) {
+                waitingSince = nil
+                onSpeakerFinished?()
+            }
             prevSpeakerStatus = ss.status
             speaker = ss
         }
+        if waitingSince != nil && Date() > waitDeadline { waitingSince = nil; onSpeakerFinished?() }
         schedule()
     }
 
