@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import AVFoundation
 
 /// 음성 메모·파일 등 다른 앱의 공유 메뉴 → '말글' → 바로 업로드
 @objc(ShareViewController)
@@ -43,6 +44,16 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
 
     var configured: Bool { SharedSettings.isConfigured }
     let deviceMode = TranscribeEngine.current == .device
+    /// 처리 방식 (앱 설정값으로 시작, 이번 공유만 바꿀 수 있음)
+    @Published var action: ShareAction = {
+        let a = ShareAction.current
+        if a == .deviceThenUpload, #unavailable(iOS 26.0) { return .keep }
+        return SharedInbox.available ? a : .upload
+    }()
+    let inboxAvailable = SharedInbox.available
+    static var deviceAvailable: Bool { if #available(iOS 26.0, *) { return true }; return false }
+    var copyMode: Bool { action != .upload && inboxAvailable }
+    var canSend: Bool { !files.isEmpty && phase != .loading && (copyMode || configured) }
 
     private static let types = [UTType.audio, UTType.movie, UTType.audiovisualContent]
 
@@ -86,7 +97,41 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
         return SharedFile(url: dest, originalName: name, size: UploadKit.fileSize(dest))
     }
 
+    /// 앱으로 복사(App Group 전달함) — 서버로 올리지 않음. 말글 앱이 열릴 때 '내 녹음'으로 가져감
+    private func copyToApp() async {
+        for f in files {
+            let name = uploadName(f)
+            let recorded = await Self.recordedDate(f.url)
+            do {
+                try SharedInbox.put(f.url, meta: .init(title: (name as NSString).deletingPathExtension, filename: name,
+                                                       recordedAt: recorded, action: action.rawValue))
+            } catch {
+                phase = .failed("\(f.originalName): \(error.localizedDescription)")
+                return
+            }
+        }
+        phase = .done
+        status = action == .deviceThenUpload
+            ? "말글 앱에 담았어요. 앱을 열면 이 기기에서 받아쓰고 함께 올립니다."
+            : "말글 앱 '내 녹음'에 담았어요."
+        try? await Task.sleep(for: .seconds(1.4))
+        close()
+    }
+
+    /// 녹음 시각: 파일 메타데이터(음성 메모가 기록) → 없으면 파일 생성 시각
+    nonisolated static func recordedDate(_ url: URL) async -> Date? {
+        let asset = AVURLAsset(url: url)
+        if let item = try? await asset.load(.creationDate), let d = try? await item.load(.dateValue) { return d }
+        return (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+    }
+
     func send() {
+        if copyMode {
+            phase = .sending
+            status = "말글 앱으로 복사하는 중..."
+            Task { await copyToApp() }
+            return
+        }
         phase = .sending
         results = []
         Task {
@@ -205,7 +250,7 @@ struct ShareView: View {
     var body: some View {
         NavigationStack {
             Form {
-                if !model.configured {
+                if !model.configured && !model.copyMode {
                     Section {
                         Label("말글 앱 설정에서 먼저 서버를 연결해 주세요.", systemImage: "key")
                             .foregroundStyle(.secondary)
@@ -229,10 +274,25 @@ struct ShareView: View {
                     }
                 }
                 Section {
-                    Toggle(model.deviceMode ? "업로드 후 이 기기에서 받아쓰기 (말글 앱을 열면 시작)" : "업로드 후 바로 받아쓰기 (AssemblyAI)",
-                           isOn: $model.autoTranscribe)
+                    Picker("처리", selection: $model.action) {
+                        ForEach(ShareAction.allCases) { a in
+                            if a == .upload || model.inboxAvailable {
+                                if a != .deviceThenUpload || ShareModel.deviceAvailable { Text(a.label).tag(a) }
+                            }
+                        }
+                    }
+                    if model.action == .upload {
+                        Toggle(model.deviceMode ? "업로드 후 이 기기에서 받아쓰기 (말글 앱을 열면 시작)" : "업로드 후 바로 받아쓰기 (AssemblyAI)",
+                               isOn: $model.autoTranscribe)
+                    }
                 } footer: {
-                    Text("다 보낼 때까지 이 화면을 열어 두세요. 큰 파일은 Tailscale에 연결되어 있을 때만 올릴 수 있어요(100MB 초과).")
+                    if !model.inboxAvailable {
+                        Text("앱 그룹이 아직 준비되지 않아 바로 올리기만 할 수 있어요.")
+                    } else if model.action == .upload {
+                        Text("다 보낼 때까지 이 화면을 열어 두세요. 큰 파일은 Tailscale에 연결되어 있을 때만 올릴 수 있어요(100MB 초과).")
+                    } else {
+                        Text("서버로 올리지 않고 말글 앱으로 복사만 합니다. 기본값은 말글 앱 설정 > 처리 방식에서 바꿀 수 있어요.")
+                    }
                 }
                 if model.phase == .sending || model.phase == .done {
                     Section {
@@ -257,9 +317,9 @@ struct ShareView: View {
                     case .sending: ProgressView()
                     case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                     default:
-                        Button("보내기") { model.send() }
+                        Button(model.copyMode ? "담기" : "보내기") { model.send() }
                             .fontWeight(.semibold)
-                            .disabled(model.files.isEmpty || !model.configured || model.phase == .loading)
+                            .disabled(!model.canSend)
                     }
                 }
             }

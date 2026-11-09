@@ -8,6 +8,7 @@ struct RecordTabView: View {
     @EnvironmentObject private var config: AppConfig
     @EnvironmentObject private var uploads: UploadCenter
     @EnvironmentObject private var player: AudioPlayer
+    @EnvironmentObject private var device: OnDeviceJobCenter
 
     @State private var confirmDiscard = false
     @State private var renaming: Recording?
@@ -26,7 +27,10 @@ struct RecordTabView: View {
                         Text("아직 녹음이 없습니다.").foregroundStyle(.secondary)
                     }
                     ForEach(recordings.items) { r in
-                        RecordingRow(recording: r)
+                        VStack(alignment: .leading, spacing: 6) {
+                            RecordingRow(recording: r)
+                            if let j = device.job(recording: r.id) { DeviceJobLine(job: j) }
+                        }
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) { deleting = r } label: { Label("삭제", systemImage: "trash") }
                                 Button { renameText = r.title; renaming = r } label: { Label("이름", systemImage: "pencil") }.tint(.orange)
@@ -46,6 +50,12 @@ struct RecordTabView: View {
                                     Button { recordings.upload(r, autoTranscribe: true) } label: {
                                         Label("업로드 후 바로 받아쓰기", systemImage: "waveform")
                                     }
+                                    if AppConfig.deviceTranscribeAvailable && r.meetingID == nil && device.job(recording: r.id) == nil {
+                                        Button {
+                                            device.requestNotificationPermission()
+                                            device.enqueueLocalFirst(r)
+                                        } label: { Label("이 기기에서 받아쓰고 함께 올리기", systemImage: "iphone") }
+                                    }
                                 }
                                 if let id = r.meetingID {
                                     Button { router.meetingID = id; router.tab = .meetings } label: { Label("회의 열기", systemImage: "text.bubble") }
@@ -63,7 +73,7 @@ struct RecordTabView: View {
                 }
             }
             .navigationTitle("녹음")
-            .refreshable { recordings.reload() }
+            .refreshable { recordings.reload(); device.resume() }
             .sheet(item: $recorder.finished) { r in FinishRecordingSheet(recording: r) }
             .alert("이름 변경", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { r in
                 TextField("제목", text: $renameText)

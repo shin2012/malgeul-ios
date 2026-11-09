@@ -18,6 +18,8 @@ struct UploadJob: Codable, Identifiable, Equatable {
     var removeSourceWhenDone = false
     /// 업로드가 끝나면 이 기기에서 받아쓰기 (설정 '받아쓰기 방식 = 이 기기')
     var deviceTranscribe: Bool?
+    /// 기기에서 먼저 받아쓴 결과를 이 업로드가 끝나면 함께 저장 (OnDeviceJobCenter 작업 id)
+    var deviceResultJob: String?
 
     var sourceURL: URL { URL(fileURLWithPath: NSHomeDirectory()).appending(path: sourceRelPath) }
     var title: String { (filename as NSString).deletingPathExtension }
@@ -110,14 +112,16 @@ final class UploadCenter: NSObject, ObservableObject {
     }
 
     func enqueue(file: URL, filename: String, recordedAt: Date? = nil, autoTranscribe: Bool = false,
-                 recordingID: String? = nil, removeSource: Bool = false) {
+                 recordingID: String? = nil, removeSource: Bool = false, deviceResultJob: UUID? = nil) {
         let home = URL(fileURLWithPath: NSHomeDirectory()).standardizedFileURL.path
         var rel = file.standardizedFileURL.path
         if rel.hasPrefix(home) { rel = String(rel.dropFirst(home.count)) }
         // 받아쓰기 방식이 '이 기기'면 서버 자동 받아쓰기 대신 업로드 후 기기에서
-        let device = autoTranscribe && AppConfig.shared.engine == .device && AppConfig.deviceTranscribeAvailable
-        let job = UploadJob(sourceRelPath: rel, filename: filename, recordedAt: recordedAt, autoTranscribe: autoTranscribe && !device,
-                            recordingID: recordingID, removeSourceWhenDone: removeSource, deviceTranscribe: device ? true : nil)
+        let device = autoTranscribe && AppConfig.shared.engine == .device && AppConfig.deviceTranscribeAvailable && deviceResultJob == nil
+        let job = UploadJob(sourceRelPath: rel, filename: filename, recordedAt: recordedAt,
+                            autoTranscribe: autoTranscribe && !device && deviceResultJob == nil,
+                            recordingID: recordingID, removeSourceWhenDone: removeSource, deviceTranscribe: device ? true : nil,
+                            deviceResultJob: deviceResultJob?.uuidString)
         jobs.insert(job, at: 0)
         save()
         start(job.id)
@@ -165,6 +169,7 @@ final class UploadCenter: NSObject, ObservableObject {
             let hash = await Task.detached(priority: .userInitiated) { UploadKit.sha256(of: src) }.value
             if let hash, let dup = try? await API.shared.checkHash(hash, server: server), dup.duplicate {
                 duplicateTitle = dup.existing?.title ?? "(제목 없음)"
+                if let dj = job.deviceResultJob.flatMap(UUID.init) { OnDeviceJobCenter.shared.uploadDuplicate(dj, existingID: dup.existing?.id) }
                 finish(id, removeSource: true)
                 return
             }
@@ -220,6 +225,9 @@ final class UploadCenter: NSObject, ObservableObject {
         }
         if obj["duplicate"] as? Bool == true {
             duplicateTitle = ((obj["existing"] as? [String: Any])?["title"] as? String) ?? "(제목 없음)"
+            if let dj = job.deviceResultJob.flatMap(UUID.init) {
+                OnDeviceJobCenter.shared.uploadDuplicate(dj, existingID: ((obj["existing"] as? [String: Any])?["id"] as? NSNumber)?.intValue)
+            }
             finish(id, removeSource: true)
             return
         }
@@ -228,7 +236,9 @@ final class UploadCenter: NSObject, ObservableObject {
             return
         }
         if let rid = job.recordingID { RecordingStore.shared.markUploaded(rid, meetingID: meetingID) }
-        if job.deviceTranscribe == true {
+        if let dj = job.deviceResultJob.flatMap(UUID.init) {
+            OnDeviceJobCenter.shared.uploaded(dj, meetingID: meetingID)
+        } else if job.deviceTranscribe == true {
             OnDeviceJobCenter.shared.enqueueTranscribe(meetingID: meetingID, title: (obj["title"] as? String) ?? job.title,
                                                        localFile: job.sourceURL)
         }

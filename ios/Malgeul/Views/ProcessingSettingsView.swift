@@ -26,6 +26,14 @@ struct ProcessingSection: View {
                     ForEach(SpeakerMode.allCases) { Text($0.label).tag($0) }
                 }
             }
+            Picker("공유 메뉴로 받은 파일", selection: $config.shareAction) {
+                ForEach(ShareAction.allCases) { a in
+                    if a != .deviceThenUpload || AppConfig.deviceTranscribeAvailable { Text(a.label).tag(a) }
+                }
+            }
+            if !SharedInbox.available && config.shareAction != .upload {
+                Text("앱 그룹이 아직 준비되지 않아 공유 메뉴에서는 바로 올리기만 됩니다.").font(.caption).foregroundStyle(.orange)
+            }
         } header: {
             Text("처리 방식")
         } footer: {

@@ -34,6 +34,8 @@ final class AppConfig: ObservableObject {
     @Published var deleteAfterUpload: Bool { didSet { UserDefaults.standard.set(deleteAfterUpload, forKey: "deleteAfterUpload") } }
     /// 받아쓰기 방식 (공유 확장도 읽도록 키체인)
     @Published var engine: TranscribeEngine { didSet { Keychain.set(engine.rawValue, for: "engine") } }
+    /// 공유 메뉴로 받은 파일 처리 방식 (공유 확장도 읽도록 키체인)
+    @Published var shareAction: ShareAction { didSet { Keychain.set(shareAction.rawValue, for: "shareAction") } }
     /// 기기 받아쓰기 때 화자 추정 방식
     @Published var speakerMode: SpeakerMode { didSet { UserDefaults.standard.set(speakerMode.rawValue, forKey: "speakerMode") } }
     /// 기기 목소리 판정 기준 (기기 임베딩 모델은 서버와 달라 따로 맞춤)
@@ -60,6 +62,8 @@ final class AppConfig: ObservableObject {
         let e = TranscribeEngine.current
         engine = (e == .device && !AppConfig.deviceTranscribeAvailable) ? .assemblyai : e
         speakerMode = SpeakerMode(rawValue: d.string(forKey: "speakerMode") ?? "") ?? .server
+        let sa = ShareAction.current
+        shareAction = (sa == .deviceThenUpload && !AppConfig.deviceTranscribeAvailable) ? .keep : sa
         voiceStrong = d.object(forKey: "voiceStrong") as? Double ?? AppConfig.defaultVoice.strong
         voiceWeak = d.object(forKey: "voiceWeak") as? Double ?? AppConfig.defaultVoice.weak
         voiceMargin = d.object(forKey: "voiceMargin") as? Double ?? AppConfig.defaultVoice.margin

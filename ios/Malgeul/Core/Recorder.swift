@@ -32,14 +32,42 @@ final class RecordingStore: ObservableObject {
         return d.appending(path: "recordings.json")
     }
 
+    nonisolated static let audioExts: Set<String> = ["m4a", "mp3", "wav", "aac", "caf", "flac", "mp4", "mov", "m4v", "aif", "aiff", "ogg", "webm"]
+
     private init() { reload() }
+
+    /// 공유 확장이 App Group 전달함에 넣어 둔 파일을 '내 녹음'으로 가져옴. 가져온 항목과 처리 방식을 돌려줌
+    @discardableResult
+    func importShared() -> [(Recording, ShareAction)] {
+        var out: [(Recording, ShareAction)] = []
+        for item in SharedInbox.items() {
+            let ext = (item.meta.filename as NSString).pathExtension.isEmpty ? "m4a" : (item.meta.filename as NSString).pathExtension
+            var base = item.meta.title.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
+            if base.isEmpty { base = "공유한 녹음" }
+            var name = "\(base).\(ext)"
+            var n = 2
+            while FileManager.default.fileExists(atPath: Self.folder.appending(path: name).path) { name = "\(base) \(n).\(ext)"; n += 1 }
+            let dest = Self.folder.appending(path: name)
+            do { try FileManager.default.moveItem(at: item.file, to: dest) } catch {
+                guard (try? FileManager.default.copyItem(at: item.file, to: dest)) != nil else { continue }
+            }
+            try? FileManager.default.removeItem(at: item.dir)
+            let dur = (try? AVAudioPlayer(contentsOf: dest))?.duration ?? AudioTools.duration(dest) ?? 0
+            let r = Recording(id: name, title: base, startedAt: item.meta.recordedAt ?? .now, duration: dur)
+            items.removeAll { $0.id == name }
+            add(r)
+            items.sort { $0.startedAt > $1.startedAt }
+            out.append((r, ShareAction(rawValue: item.meta.action) ?? .keep))
+        }
+        return out
+    }
 
     /// 색인과 실제 파일을 맞춤: 파일 앱에서 지운 건 빼고, 색인에 없는 m4a(예: 비정상 종료)는 추가
     func reload() {
         var list = (try? Data(contentsOf: Self.indexFile)).flatMap { try? JSONDecoder().decode([Recording].self, from: $0) } ?? []
         let files = (try? FileManager.default.contentsOfDirectory(atPath: Self.folder.path)) ?? []
         list.removeAll { !files.contains($0.id) }
-        for f in files where f.hasSuffix(".m4a") && !list.contains(where: { $0.id == f }) {
+        for f in files where Self.audioExts.contains((f as NSString).pathExtension.lowercased()) && !list.contains(where: { $0.id == f }) {
             let url = Self.folder.appending(path: f)
             let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
             let dur = (try? AVAudioPlayer(contentsOf: url))?.duration ?? 0
@@ -77,10 +105,12 @@ final class RecordingStore: ObservableObject {
         save()
     }
 
-    func upload(_ r: Recording, autoTranscribe: Bool) {
+    func upload(_ r: Recording, autoTranscribe: Bool, deviceResultJob: UUID? = nil) {
         let safe = r.title.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
-        UploadCenter.shared.enqueue(file: r.fileURL, filename: (safe.isEmpty ? "회의 녹음" : safe) + ".m4a",
-                                    recordedAt: r.startedAt, autoTranscribe: autoTranscribe, recordingID: r.id)
+        let ext = (r.id as NSString).pathExtension.isEmpty ? "m4a" : (r.id as NSString).pathExtension
+        UploadCenter.shared.enqueue(file: r.fileURL, filename: (safe.isEmpty ? "회의 녹음" : safe) + "." + ext,
+                                    recordedAt: r.startedAt, autoTranscribe: autoTranscribe, recordingID: r.id,
+                                    deviceResultJob: deviceResultJob)
     }
 }
 

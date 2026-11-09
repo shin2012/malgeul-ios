@@ -137,11 +137,9 @@ struct RootView: View {
             // 앱으로 돌아오면 목록을 새로 받음 (다른 기기·웹에서 바뀐 내용 반영)
             guard phase == .active else { return }
             recordings.reload()
-            if config.isConfigured {
-                Task {
-                    await store.refresh()
-                    OnDeviceJobCenter.shared.resume()   // 공유 확장이 맡긴 기기 받아쓰기·멈춘 작업 이어서
-                }
+            Task {
+                if config.isConfigured { await store.refresh() }
+                OnDeviceJobCenter.shared.resume()   // 공유 확장이 넣어 둔 파일 가져오기 · 기기 받아쓰기 · 멈춘 작업 이어서
             }
         }
         .alert("중복 파일", isPresented: Binding(get: { uploads.duplicateTitle != nil }, set: { if !$0 { uploads.duplicateTitle = nil } })) {

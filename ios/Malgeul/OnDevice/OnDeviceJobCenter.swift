@@ -7,7 +7,15 @@ import UserNotifications
 /// 앱이 백그라운드로 가도 iOS 26의 '계속 처리' 작업으로 이어서 처리하고, 끝나면 알림.
 struct DeviceJob: Codable, Identifiable, Equatable {
     enum Kind: String, Codable { case transcribe, speakers }
-    enum State: String, Codable { case queued, running, failed }
+    enum State: String, Codable { case queued, running, failed, waitingUpload }
+
+    /// 기기에서 먼저 받아쓴 결과(업로드 끝나면 서버에 저장)
+    struct Pending: Codable, Equatable {
+        var segments: [DeviceSegment]
+        var duration: Double
+        var engine: String
+        var voiceJSON: Data?
+    }
 
     var id = UUID()
     var kind: Kind
@@ -23,6 +31,9 @@ struct DeviceJob: Codable, Identifiable, Equatable {
     var progress: Double = 0
     var message: String?
     var createdAt: Date?
+    /// '내 녹음' 항목 (기기에서 먼저 받아쓰고 함께 올리기). 이때 meetingID는 업로드 전까지 0
+    var recordingID: String?
+    var pending: Pending?
 
     var localURL: URL? { localRelPath.map { URL(fileURLWithPath: NSHomeDirectory()).appending(path: $0) } }
     var mode: SpeakerMode { SpeakerMode(rawValue: speakerMode ?? "") ?? .server }
@@ -77,7 +88,48 @@ final class OnDeviceJobCenter: ObservableObject {
         if let d = try? Data(contentsOf: Self.reportFile) { lastReport = try? JSONDecoder().decode(DeviceRunReport.self, from: d) }
     }
 
-    func job(for meetingID: Int) -> DeviceJob? { jobs.first { $0.meetingID == meetingID } }
+    func job(for meetingID: Int) -> DeviceJob? { meetingID > 0 ? jobs.first { $0.meetingID == meetingID } : nil }
+    func job(recording id: String) -> DeviceJob? { jobs.first { $0.recordingID == id } }
+
+    /// '내 녹음' 파일을 기기에서 먼저 받아쓰고, 끝나면 오디오와 대본을 함께 올림
+    func enqueueLocalFirst(_ r: Recording) {
+        guard AppConfig.deviceTranscribeAvailable else { lastError = DeviceEngineError.unsupportedOS.localizedDescription; return }
+        if let j = job(recording: r.id), j.state != .failed { return }
+        jobs.removeAll { $0.recordingID == r.id }
+        jobs.append(DeviceJob(kind: .transcribe, meetingID: 0, title: r.title, localRelPath: Self.homeRelative(r.fileURL),
+                              speakerMode: AppConfig.shared.speakerMode.rawValue, message: "대기 중", createdAt: Date(),
+                              recordingID: r.id))
+        save()
+        kick()
+    }
+
+    /// 업로드 완료 → 미뤄 둔 기기 결과 저장
+    func uploaded(_ jobID: UUID, meetingID: Int) {
+        guard let j = jobs.first(where: { $0.id == jobID }), let p = j.pending else { return }
+        set(jobID) { $0.meetingID = meetingID; $0.message = "서버에 대본 저장" }
+        save()
+        Task {
+            do {
+                let voice = p.voiceJSON.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+                try await API.shared.submitDeviceResult(meetingID, segments: p.segments, duration: p.duration, engine: p.engine,
+                                                        speakerMode: j.mode, voice: voice, replace: false)
+                remove(jobID, keepFile: true)
+                finished = Finished(meetingID: meetingID, submittedAt: Date())
+                notify(title: "기기 받아쓰기 완료", body: j.title)
+                await MeetingStore.shared.refresh()
+            } catch {
+                set(jobID) { $0.state = .failed; $0.message = "대본 저장 실패: \(error.localizedDescription)" }
+                save()
+            }
+        }
+    }
+
+    /// 같은 파일이 이미 서버에 있음 → 기기 결과는 버림
+    func uploadDuplicate(_ jobID: UUID, existingID: Int?) {
+        guard jobs.contains(where: { $0.id == jobID }) else { return }
+        remove(jobID, keepFile: true)
+        lastError = "이미 서버에 같은 파일이 있어 기기 받아쓰기 결과를 저장하지 않았어요." + (existingID.map { " (회의 #\($0))" } ?? "")
+    }
     var isBusy: Bool { jobs.contains { $0.state == .running } }
 
     private func save() {
@@ -122,6 +174,9 @@ final class OnDeviceJobCenter: ObservableObject {
     }
 
     func retry(_ id: UUID) {
+        guard let j = jobs.first(where: { $0.id == id }) else { return }
+        // 결과는 이미 있고 저장만 실패 → 저장만 다시
+        if j.pending != nil, j.meetingID > 0 { set(id) { $0.state = .waitingUpload }; uploaded(id, meetingID: j.meetingID); return }
         set(id) { $0.state = .queued; $0.progress = 0; $0.message = "대기 중" }
         save()
         kick()
@@ -134,8 +189,15 @@ final class OnDeviceJobCenter: ObservableObject {
         Task { await API.shared.deviceProgress(j.meetingID, pct: nil, message: nil, done: true) }
     }
 
-    /// 앱이 열릴 때: 공유 확장이 남긴 대기 목록 + 멈춘 작업 이어서
+    /// 앱이 열릴 때: 공유 확장이 남긴 파일·대기 목록 + 멈춘 작업 이어서
     func resume() {
+        for (r, action) in RecordingStore.shared.importShared() {
+            switch action {
+            case .deviceThenUpload: enqueueLocalFirst(r)
+            case .upload: RecordingStore.shared.upload(r, autoTranscribe: false)
+            case .keep: break
+            }
+        }
         for id in DeviceQueue.take() {
             enqueueTranscribe(meetingID: id, title: MeetingStore.shared.meetings.first { $0.id == id }?.title ?? "회의 \(id)")
         }
@@ -154,8 +216,8 @@ final class OnDeviceJobCenter: ObservableObject {
         }
     }
 
-    private func remove(_ id: UUID) {
-        if let j = jobs.first(where: { $0.id == id }), let u = j.localURL, u.path.hasPrefix(Self.workDir.path) {
+    private func remove(_ id: UUID, keepFile: Bool = false) {
+        if !keepFile, let j = jobs.first(where: { $0.id == id }), let u = j.localURL, u.path.hasPrefix(Self.workDir.path) {
             try? FileManager.default.removeItem(at: u)
         }
         jobs.removeAll { $0.id == id }
@@ -165,7 +227,7 @@ final class OnDeviceJobCenter: ObservableObject {
     private func progress(_ id: UUID, _ p: Double, _ msg: String) {
         set(id) { $0.progress = p; $0.message = msg }
         updateBackground(progress: p, message: msg)
-        guard let j = jobs.first(where: { $0.id == id }), Date().timeIntervalSince(lastPost) > 3 else { return }
+        guard let j = jobs.first(where: { $0.id == id }), j.meetingID > 0, Date().timeIntervalSince(lastPost) > 3 else { return }
         lastPost = Date()
         Task { await API.shared.deviceProgress(j.meetingID, pct: p, message: "기기: \(msg) \(Int(p * 100))%") }
     }
@@ -182,13 +244,15 @@ final class OnDeviceJobCenter: ObservableObject {
             case .transcribe: try await runTranscribe(job)
             case .speakers: try await runSpeakers(job)
             }
+            // 먼저 받아쓰고 올리는 작업: 업로드가 끝날 때까지 남겨 둠
+            if job.meetingID == 0 { return }
             await API.shared.deviceProgress(job.meetingID, pct: nil, message: nil, done: true)
             notify(title: job.kind == .transcribe ? "기기 받아쓰기 완료" : "기기 화자 추정 요청 완료", body: job.title)
             remove(id)
             finished = Finished(meetingID: job.meetingID, submittedAt: started)
             await MeetingStore.shared.refresh()
         } catch {
-            await API.shared.deviceProgress(job.meetingID, pct: nil, message: nil, done: true)
+            if job.meetingID > 0 { await API.shared.deviceProgress(job.meetingID, pct: nil, message: nil, done: true) }
             if Task.isCancelled || error.isCancellation || (error as? DeviceEngineError) == .cancelled { return }
             let msg = error.localizedDescription
             set(id) { $0.state = .failed; $0.message = msg }
@@ -253,7 +317,7 @@ final class OnDeviceJobCenter: ObservableObject {
             for (raw, e) in dia.embeddings { if let l = relabeled.map[raw] { labelEmb[l] = e } }
             let used = Set(segments.map(\.speaker))
             labelEmb = labelEmb.filter { used.contains($0.key) }
-            let people = try await VoiceProfiles.shared.ensure(exclude: job.excludeMeeting ?? job.meetingID) { p, m in
+            let people = try await VoiceProfiles.shared.ensure(exclude: job.excludeMeeting ?? (job.meetingID > 0 ? job.meetingID : nil)) { p, m in
                 Task { @MainActor in OnDeviceJobCenter.shared.progress(id, 0.9 + 0.06 * p, m) }
             }
             let v = VoiceProfiles.voicePayload(labelEmbeddings: labelEmb, people: people)
@@ -262,10 +326,23 @@ final class OnDeviceJobCenter: ObservableObject {
             voiceSec = Date().timeIntervalSince(t2)
         }
 
-        progress(id, 0.97, "서버에 저장")
-        try await API.shared.submitDeviceResult(job.meetingID, segments: segments, duration: duration,
-                                                engine: "\(SpeechEngine.engineName)+\(DiarizerEngine.engineName)",
-                                                speakerMode: job.mode, voice: voice, replace: job.replace ?? false)
+        let engine = "\(SpeechEngine.engineName)+\(DiarizerEngine.engineName)"
+        if job.meetingID == 0 {
+            // 아직 서버에 없는 '내 녹음' → 결과를 보관하고 오디오 업로드, 끝나면 uploaded()가 저장
+            let p = DeviceJob.Pending(segments: segments, duration: duration, engine: engine,
+                                      voiceJSON: voice.flatMap { try? JSONSerialization.data(withJSONObject: $0) })
+            set(id) { $0.pending = p; $0.state = .waitingUpload; $0.progress = 1; $0.message = "오디오 올리는 중" }
+            save()
+            if let rid = job.recordingID, let r = RecordingStore.shared.items.first(where: { $0.id == rid }) {
+                RecordingStore.shared.upload(r, autoTranscribe: false, deviceResultJob: id)
+            } else {
+                throw APIError.http(0, "내 녹음에서 파일을 찾을 수 없습니다")
+            }
+        } else {
+            progress(id, 0.97, "서버에 저장")
+            try await API.shared.submitDeviceResult(job.meetingID, segments: segments, duration: duration, engine: engine,
+                                                    speakerMode: job.mode, voice: voice, replace: job.replace ?? false)
+        }
         saveReport(DeviceRunReport(meetingID: job.meetingID, title: job.title, audioSeconds: duration, diarizeSeconds: diarizeSec,
                                    transcribeSeconds: transcribeSec, voiceSeconds: voiceSec, speakers: Set(segments.map(\.speaker)).count,
                                    segments: segments.count, characters: segments.reduce(0) { $0 + $1.text.count },

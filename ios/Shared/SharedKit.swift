@@ -80,6 +80,66 @@ enum TranscribeEngine: String, CaseIterable, Identifiable {
     static var current: TranscribeEngine { TranscribeEngine(rawValue: Keychain.get("engine") ?? "") ?? .assemblyai }
 }
 
+/// 다른 앱 공유 메뉴로 받은 파일 처리 방식 (앱 설정, 공유 확장이 읽음)
+enum ShareAction: String, CaseIterable, Identifiable {
+    case keep, deviceThenUpload, upload
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .keep: return "내 녹음에 넣어 두기"
+        case .deviceThenUpload: return "이 기기에서 받아쓰고 함께 올리기"
+        case .upload: return "바로 서버로 올리기"
+        }
+    }
+    static var current: ShareAction { ShareAction(rawValue: Keychain.get("shareAction") ?? "") ?? .keep }
+}
+
+/// 공유 확장 → 앱 파일 전달함 (App Group 컨테이너 Inbox/<uuid>/파일 + meta.json)
+enum SharedInbox {
+    static let groupID = "group.kr.b-612.malgeul"
+
+    struct Meta: Codable {
+        var title: String
+        var filename: String
+        var recordedAt: Date?
+        var action: String
+    }
+
+    static var folder: URL? {
+        guard let c = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) else { return nil }
+        let d = c.appending(path: "Inbox", directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+    static var available: Bool { folder != nil }
+
+    /// 파일을 전달함으로 옮김(같은 볼륨이 아니면 복사)
+    static func put(_ file: URL, meta: Meta) throws {
+        guard let f = folder else { throw NSError(domain: "malgeul", code: 1, userInfo: [NSLocalizedDescriptionKey: "앱 그룹을 쓸 수 없습니다"]) }
+        let dir = f.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dest = dir.appending(path: meta.filename)
+        do { try FileManager.default.moveItem(at: file, to: dest) } catch { try FileManager.default.copyItem(at: file, to: dest) }
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .iso8601
+        try enc.encode(meta).write(to: dir.appending(path: "meta.json"), options: .atomic)
+    }
+
+    /// 앱: 전달함 항목들 (폴더, 파일, 메타). 다 처리하면 폴더를 지울 것
+    static func items() -> [(dir: URL, file: URL, meta: Meta)] {
+        guard let f = folder, let dirs = try? FileManager.default.contentsOfDirectory(at: f, includingPropertiesForKeys: [.creationDateKey]) else { return [] }
+        let dec = JSONDecoder()
+        dec.dateDecodingStrategy = .iso8601
+        var out: [(URL, URL, Meta)] = []
+        for d in dirs {
+            guard let data = try? Data(contentsOf: d.appending(path: "meta.json")), let m = try? dec.decode(Meta.self, from: data) else { continue }
+            let file = d.appending(path: m.filename)
+            if FileManager.default.fileExists(atPath: file.path) { out.append((d, file, m)) }
+        }
+        return out
+    }
+}
+
 /// 공유 확장이 올린 회의 중 '기기에서 받아쓰기' 대기 목록 (앱이 열리면 처리). App Group 없이 공유 키체인에 작은 JSON으로
 enum DeviceQueue {
     static func all() -> [Int] {
