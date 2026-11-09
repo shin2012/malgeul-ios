@@ -154,6 +154,8 @@ struct DocPanelView: View {
                     Text(r?.status == "processing" ? "작성 중… (1~2분)" : r?.status == "done" ? "다시 작성" : "작성하기")
                 }
                 .frame(maxWidth: .infinity)
+                // 가운데 정렬 글자 기준으로 구분선이 들여 써지지 않게 행 왼쪽 끝부터
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
             }
             .disabled(r?.status == "processing")
 

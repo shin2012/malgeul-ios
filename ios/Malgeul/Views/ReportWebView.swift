@@ -7,6 +7,13 @@ import WebKit
 final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     @Published var loading = true
     @Published var loadError: String?
+    /// 페이지 상태 (페이지 도구 막대는 숨기고 앱 툴바로 조작)
+    @Published var saveText = ""
+    @Published var dirty = false
+    @Published var edited = false
+    @Published var docType = "meeting"
+    @Published var conf = true
+    @Published var wm = true
     private(set) var webView: WKWebView!
     private var origin = ""
     private var lastAuthReload = Date.distantPast
@@ -33,10 +40,39 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
           window.print = function(){ window.webkit.messageHandlers.malgeulPrint.postMessage(document.title || ''); };
         })();
         """
+        // 앱 안에서는: 페이지 도구 막대 숨김(앱 툴바로 대신) + 좁은 화면에선 A4 폭을 화면에 맞춤(확대해도 메뉴는 그대로)
+        let appScript = """
+        (function(){
+          var css=document.createElement('style');
+          css.textContent='.bar{display:none!important} .sheet{margin-top:12px!important;margin-bottom:24px!important}';
+          document.head.appendChild(css);
+          var m=document.querySelector('meta[name=viewport]');
+          if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}
+          var w=Math.min(screen.width, document.documentElement.clientWidth||screen.width);
+          if(w<830) m.setAttribute('content','width=830, minimum-scale=0.2, maximum-scale=5');
+          var b=document.body, st=document.getElementById('save-st');
+          function send(){
+            try{ window.webkit.messageHandlers.malgeulState.postMessage({
+              save:(st&&st.textContent)||'', dirty:!!(st&&st.classList.contains('dirty')), edited:!!b.dataset.edited,
+              type:b.dataset.type||'meeting', conf:b.dataset.conf!=='off', wm:b.dataset.wm!=='off'}); }catch(e){}
+          }
+          new MutationObserver(send).observe(b,{attributes:true,attributeFilter:['data-type','data-conf','data-wm','data-edited']});
+          if(st) new MutationObserver(send).observe(st,{childList:true,characterData:true,subtree:true,attributes:true});
+          window.__malgeul={
+            save:function(){var x=document.getElementById('btn-save'); if(x)x.click();},
+            revert:function(){var x=document.getElementById('btn-revert'); if(x)x.click();},
+            type:function(t){var x=document.querySelector('#seg-type button[data-v="'+t+'"]'); if(x)x.click();},
+            toggle:function(id){var x=document.getElementById(id); if(x){x.checked=!x.checked; x.dispatchEvent(new Event('change'));}}
+          };
+          send();
+        })();
+        """
         let cfg = WKWebViewConfiguration()
         let ucc = WKUserContentController()
         ucc.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        ucc.addUserScript(WKUserScript(source: appScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         ucc.add(WeakScriptHandler(self), name: "malgeulPrint")
+        ucc.add(WeakScriptHandler(self), name: "malgeulState")
         cfg.userContentController = ucc
         cfg.websiteDataStore = .nonPersistent()
         let wv = WKWebView(frame: .zero, configuration: cfg)
@@ -105,7 +141,19 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     // MARK: 인쇄 (페이지의 '인쇄 / PDF 저장' 버튼)
+    func run(_ js: String) { webView?.evaluateJavaScript("window.__malgeul && window.__malgeul.\(js)", completionHandler: nil) }
+    func printDoc() { webView?.evaluateJavaScript("window.print()", completionHandler: nil) }
+
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "malgeulState", let o = message.body as? [String: Any] {
+            saveText = o["save"] as? String ?? ""
+            dirty = o["dirty"] as? Bool ?? false
+            edited = o["edited"] as? Bool ?? false
+            docType = o["type"] as? String ?? "meeting"
+            conf = o["conf"] as? Bool ?? true
+            wm = o["wm"] as? Bool ?? true
+            return
+        }
         guard message.name == "malgeulPrint", let webView else { return }
         let info = UIPrintInfo(dictionary: nil)
         info.outputType = .general
@@ -179,7 +227,6 @@ struct ReportWebView: View {
                     ProgressView()
                 }
             }
-            .navigationTitle("보기·편집")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar {
@@ -190,8 +237,40 @@ struct ReportWebView: View {
                         }
                     } label: { Label("뒤로", systemImage: "chevron.backward") }
                 }
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 0) {
+                        Text("보기·편집").font(.headline)
+                        if !controller.saveText.isEmpty {
+                            Text(controller.saveText).font(.caption2)
+                                .foregroundStyle(controller.dirty ? Color.red : Color.secondary)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { controller.loadError = nil; controller.reload() } label: { Label("새로고침", systemImage: "arrow.clockwise") }
+                    Button("저장") { controller.run("save()") }
+                        .fontWeight(controller.dirty ? .semibold : .regular)
+                        .disabled(controller.loadError != nil)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { controller.printDoc() } label: { Label("인쇄 / PDF 저장", systemImage: "printer") }
+                        if controller.edited {
+                            Button(role: .destructive) { controller.run("revert()") } label: { Label("자동 작성본으로", systemImage: "arrow.uturn.backward") }
+                        }
+                        Section("문서 유형") {
+                            Picker("문서 유형", selection: Binding(get: { controller.docType }, set: { controller.run("type('\($0)')") })) {
+                                Text("회의록").tag("meeting")
+                                Text("출장복명서").tag("trip")
+                            }
+                        }
+                        Section {
+                            Toggle("CONFIDENTIAL 표시", isOn: Binding(get: { controller.conf }, set: { _ in controller.run("toggle('opt-conf')") }))
+                            Toggle("배경 워터마크", isOn: Binding(get: { controller.wm }, set: { _ in controller.run("toggle('opt-wm')") }))
+                        }
+                        Button { controller.loadError = nil; controller.reload() } label: { Label("새로고침", systemImage: "arrow.clockwise") }
+                    } label: {
+                        Label("더 보기", systemImage: "ellipsis.circle")
+                    }
                 }
             }
             .confirmationDialog("저장하지 않은 수정 내용이 있습니다. 나갈까요?", isPresented: $confirmLeave, titleVisibility: .visible) {

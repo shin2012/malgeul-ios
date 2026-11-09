@@ -5,6 +5,7 @@ private let suggestions = ["주요 결정사항을 정리해줘", "액션 아이
 /// 회의 스크립트 기반 질문 (서버 LLM 체인, SSE 스트리밍). 대화 기록은 서버에 저장됨.
 struct ChatView: View {
     let meetingID: Int
+    @Environment(\.horizontalSizeClass) private var hsize
 
     @State private var messages: [ChatMessage] = []
     @State private var input = ""
@@ -61,8 +62,10 @@ struct ChatView: View {
                     .disabled(sending)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        // 아이폰에선 둥근 시트 위쪽(손잡이·모서리)과 붙지 않게 여백을 더 줌
+        .padding(.horizontal, hsize == .compact ? 20 : 14)
+        .padding(.top, hsize == .compact ? 22 : 10)
+        .padding(.bottom, 10)
     }
 
     private var empty: some View {
