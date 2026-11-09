@@ -53,8 +53,8 @@ struct ChatView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "bubble.left.and.text.bubble.right").foregroundStyle(.accentMalgeul)
-            Text("Claude에게 질문").font(.headline).lineLimit(1).layoutPriority(1)
-            Text("스크립트 기반").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text("AI 질문").font(.headline).lineLimit(1).layoutPriority(1)
+            Text("대화 내용 기반").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             Spacer()
             if !messages.isEmpty {
                 Button { confirmClear = true } label: { Image(systemName: "trash") }
@@ -115,7 +115,7 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("질문 입력", text: $input, axis: .vertical)
+            TextField("무엇이든 물어보세요", text: $input, axis: .vertical)
                 .lineLimit(1...6)
                 .focused($focused)
                 .padding(.horizontal, 12).padding(.vertical, 8)
