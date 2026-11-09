@@ -44,12 +44,15 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
         let appScript = """
         (function(){
           var css=document.createElement('style');
-          css.textContent='.bar{display:none!important} .sheet{margin-top:12px!important;margin-bottom:24px!important}';
+          css.textContent='.bar{display:none!important} .sheet{margin-top:12px!important;margin-bottom:24px!important} @media print{.sheet{zoom:1!important}}';
           document.head.appendChild(css);
-          var m=document.querySelector('meta[name=viewport]');
-          if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}
-          var w=Math.min(screen.width, document.documentElement.clientWidth||screen.width);
-          if(w<830) m.setAttribute('content','width=830, minimum-scale=0.2, maximum-scale=5');
+          function fit(){
+            var s=document.querySelector('.sheet'); if(!s) return;
+            s.style.zoom='';
+            var w=document.documentElement.clientWidth, sw=s.offsetWidth+16;
+            if(sw>w) s.style.zoom=String(w/sw);
+          }
+          fit(); window.addEventListener('resize',fit);
           var b=document.body, st=document.getElementById('save-st');
           function send(){
             try{ window.webkit.messageHandlers.malgeulState.postMessage({
