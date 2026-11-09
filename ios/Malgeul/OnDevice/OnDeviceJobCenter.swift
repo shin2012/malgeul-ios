@@ -25,7 +25,7 @@ struct DeviceJob: Codable, Identifiable, Equatable {
     var createdAt: Date?
 
     var localURL: URL? { localRelPath.map { URL(fileURLWithPath: NSHomeDirectory()).appending(path: $0) } }
-    var mode: SpeakerMode { SpeakerMode(rawValue: speakerMode ?? "") ?? AppConfig.shared.speakerMode }
+    var mode: SpeakerMode { SpeakerMode(rawValue: speakerMode ?? "") ?? .server }
 }
 
 /// 마지막 기기 처리 결과 (설정 > 기기 처리 실험 화면 표시용)
@@ -218,7 +218,9 @@ final class OnDeviceJobCenter: ObservableObject {
 
         progress(id, 0.05, "화자 구분")
         let t0 = Date()
-        let dia = try await DiarizerEngine.shared.diarize(url: url)
+        let dia = try await DiarizerEngine.shared.diarize(url: url) { p in
+            Task { @MainActor in OnDeviceJobCenter.shared.progress(id, 0.05 + 0.15 * p, "화자 구분") }
+        }
         let diarizeSec = Date().timeIntervalSince(t0)
         try Task.checkCancellation()
 

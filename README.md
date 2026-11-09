@@ -3,7 +3,7 @@
 ![Swift](https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white)
 ![iOS](https://img.shields.io/badge/iOS-18%2B-000000?style=flat-square&logo=apple&logoColor=white)
 ![SwiftUI](https://img.shields.io/badge/SwiftUI-앱-0A84FF?style=flat-square&logo=swift&logoColor=white)
-![FluidAudio](https://img.shields.io/badge/FluidAudio-0.9.1-5E5CE6?style=flat-square)
+![FluidAudio](https://img.shields.io/badge/FluidAudio-main%20e63b523-5E5CE6?style=flat-square)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-TestFlight-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 
 회의 녹음을 글로 바꿔 주는 서비스 **말글**(말 → 글)의 iPhone·iPad 앱입니다. 웹에서 하던 일을 모두 앱에서 할 수 있고, 앱 안에서 바로 녹음해 올릴 수 있습니다.
@@ -79,7 +79,7 @@ Mac 없이 GitHub Actions에서 빌드합니다.
 | `ios/**` 푸시 | 시뮬레이터 빌드(서명 없음)로 컴파일 확인 |
 | `gh workflow run ios.yml -f testflight=true` | 아카이브 → IPA → TestFlight 업로드 |
 
-- 프로젝트 파일은 `ios/gen_project.py`로 생성합니다(동기화 폴더 방식이라 `ios/Malgeul/` 안의 Swift 파일은 자동 포함). Swift 패키지: FluidAudio 0.9.1(화자 구분).
+- 프로젝트 파일은 `ios/gen_project.py`로 생성합니다(동기화 폴더 방식이라 `ios/Malgeul/` 안의 Swift 파일은 자동 포함). Swift 패키지: FluidAudio(화자 구분) — 0.9.1 태그는 Xcode 26 최신 컴파일러에서 동시성 오류가 나서 main 커밋 `e63b523`에 고정.
 - 순수 로직 시험(맞추기·유사도): `ios/LogicTests/run.sh` (리눅스 Swift 툴체인)
 - 필요한 저장소 비밀값: `ASC_KEY_P8`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `APPLE_TEAM_ID`
 - 번들 ID: `kr.b-612.malgeul` (앱), `kr.b-612.malgeul.share` (공유 확장)

@@ -368,8 +368,8 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tisa = XCRemoteSwiftPackageReference;
 \t\t\trepositoryURL = "https://github.com/FluidInference/FluidAudio.git";
 \t\t\trequirement = {{
-\t\t\t\tkind = exactVersion;
-\t\t\t\tversion = 0.9.1;
+\t\t\t\tkind = revision;
+\t\t\t\trevision = e63b5230ee7d7428848ab17d76a57c6197836684;
 \t\t\t}};
 \t\t}};
 /* End XCRemoteSwiftPackageReference section */

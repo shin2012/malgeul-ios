@@ -50,9 +50,11 @@ actor DiarizerEngine {
     }
 
     /// 화자 구간 + 화자별 평균 임베딩 (키 = 모델 내부 이름 S1, S2…)
-    func diarize(url: URL, speakers: Int? = nil) async throws -> (turns: [SpeakerTurn], embeddings: [String: [Float]]) {
+    func diarize(url: URL, speakers: Int? = nil, onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> (turns: [SpeakerTurn], embeddings: [String: [Float]]) {
         let m = try await manager(speakers: speakers)
-        let r = try await m.process(url)
+        let r = try await m.process(url, progressCallback: { done, total in
+            if total > 0 { onProgress?(min(1, Double(done) / Double(total))) }
+        })
         let turns = r.segments.map { SpeakerTurn(speaker: $0.speakerId, start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds)) }
         var emb = r.speakerDatabase ?? [:]
         if emb.isEmpty {
