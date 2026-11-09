@@ -3,19 +3,24 @@ import UniformTypeIdentifiers
 
 struct MeetingsSplitView: View {
     @EnvironmentObject private var router: Router
+    /// 아이패드에서 목록을 늘 보이게 (세로 화면에서도 사라지지 않음). 사용자가 직접 접으면 그대로 둠
+    @State private var columns: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             MeetingListView()
-                .navigationSplitViewColumnWidth(min: 320, ideal: 400, max: 520)
+                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 460)
         } detail: {
-            if let id = router.meetingID {
-                MeetingDetailView(meetingID: id).id(id)
-            } else {
-                ContentUnavailableView("회의를 선택하세요", systemImage: "text.bubble",
-                                       description: Text("받아쓰기가 끝난 회의를 누르면 스크립트와 채팅이 열립니다."))
+            NavigationStack {
+                if let id = router.meetingID {
+                    MeetingDetailView(meetingID: id).id(id)
+                } else {
+                    ContentUnavailableView("노트를 고르세요", systemImage: "text.bubble",
+                                           description: Text("받아쓰기가 끝난 노트를 누르면 대화·회의록·AI 질문이 열립니다."))
+                }
             }
         }
+        .navigationSplitViewStyle(.balanced)
     }
 }
 
@@ -25,6 +30,8 @@ struct MeetingListView: View {
     @EnvironmentObject private var router: Router
     @EnvironmentObject private var uploads: UploadCenter
     @EnvironmentObject private var device: OnDeviceJobCenter
+    @EnvironmentObject private var recorder: Recorder
+    @Environment(\.horizontalSizeClass) private var hsize
 
     @State private var search = ""
     @State private var selecting = false
@@ -76,7 +83,8 @@ struct MeetingListView: View {
 
     private var main: some View {
         state
-            .navigationTitle("말글")
+            .navigationTitle("전체 노트")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar { toolbar }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio, .movie, .mpeg4Movie, .mpeg4Audio],
                           allowsMultipleSelection: true) { result in
@@ -129,9 +137,11 @@ struct MeetingListView: View {
     @ViewBuilder private var list: some View {
         if selecting {
             List(selection: $multi) { content(selectable: true) }
+                .listStyle(.insetGrouped)
                 .environment(\.editMode, .constant(.active))
         } else {
             List(selection: $router.meetingID) { content(selectable: false) }
+                .listStyle(.insetGrouped)
                 .refreshable { await Task { await store.refresh() }.value }
                 .searchable(text: $search, prompt: "제목 · 태그 검색")
                 .overlay {
@@ -162,13 +172,33 @@ struct MeetingListView: View {
                 ForEach(uploads.jobs) { UploadJobRow(job: $0) }
             }
         }
-        Section {
-            ForEach(filtered) { m in
-                row(m, selectable: selectable)
+        let groups = monthGroups(filtered)
+        ForEach(Array(groups.enumerated()), id: \.offset) { (gi: Int, g: (String, [Meeting])) in
+            Section {
+                ForEach(g.1) { m in
+                    row(m, selectable: selectable)
+                }
+            } header: {
+                if !g.0.isEmpty { Text(g.0) }
+            } footer: {
+                if gi == groups.count - 1 && store.doneCount > 0 { StatsFooter() }
             }
-        } footer: {
-            if store.doneCount > 0 { StatsFooter() }
         }
+    }
+
+    /// 날짜순 정렬일 때 월별로 묶음 (다른 정렬은 한 묶음)
+    private func monthGroups(_ list: [Meeting]) -> [(String, [Meeting])] {
+        guard store.sortKey == .createdAt || store.sortKey == .recordedAt else { return [("", list)] }
+        let cal = Calendar.current
+        let thisYear = cal.component(.year, from: .now)
+        var out: [(String, [Meeting])] = []
+        for m in list {
+            let d = (store.sortKey == .createdAt ? m.createdAt : m.recordedOrCreated) ?? .distantPast
+            let y = cal.component(.year, from: d), mo = cal.component(.month, from: d)
+            let label = y == thisYear ? "\(mo)월" : "\(y)년 \(mo)월"
+            if out.last?.0 == label { out[out.count - 1].1.append(m) } else { out.append((label, [m])) }
+        }
+        return out
     }
 
     @ViewBuilder private func row(_ m: Meeting, selectable: Bool) -> some View {
@@ -212,6 +242,12 @@ struct MeetingListView: View {
                 .disabled(store.meetings.isEmpty)
             }
             if !selecting {
+                if recorder.isActive && hsize == .regular {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { router.tab = .record } label: { Label("녹음 중", systemImage: "record.circle") }
+                            .tint(.red)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("정렬 기준", selection: $store.sortKey) {
@@ -221,8 +257,12 @@ struct MeetingListView: View {
                             Label("내림차순", systemImage: "arrow.down").tag(false)
                             Label("오름차순", systemImage: "arrow.up").tag(true)
                         }
+                        if hsize == .regular {
+                            Divider()
+                            Button { router.tab = .settings } label: { Label("설정", systemImage: "gearshape") }
+                        }
                     } label: {
-                        Label("정렬", systemImage: "arrow.up.arrow.down")
+                        Label("더 보기", systemImage: "ellipsis")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -230,7 +270,7 @@ struct MeetingListView: View {
                         Button { startRecording() } label: { Label("녹음하기", systemImage: "mic") }
                         Button { importing = true } label: { Label("파일 추가", systemImage: "doc.badge.plus") }
                     } label: {
-                        Label("추가", systemImage: "plus")
+                        Label("새 노트", systemImage: "plus")
                     }
                 }
             } else {
@@ -327,10 +367,10 @@ struct MeetingRow: View {
     @EnvironmentObject private var device: OnDeviceJobCenter
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline) {
                 Text(meeting.title)
-                    .font(.headline)
+                    .font(.headline.weight(.bold))
                     .foregroundStyle(meeting.isDone ? Color.primary : Color.secondary)
                     .lineLimit(2)
                 Spacer(minLength: 8)
@@ -349,7 +389,7 @@ struct MeetingRow: View {
                 Text("오류: \(e)").font(.caption).foregroundStyle(.red)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
     }
 
     /// 한 줄: 녹음 시각 · 길이 (웹과 같음). 비용은 설정 > 사용량
@@ -398,15 +438,19 @@ struct StatusBadge: View {
 struct TagRow: View {
     let tags: [String]
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(tags.prefix(3).enumerated()), id: \.offset) { _, t in
-                Text("#\(t)")
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(tags.enumerated()), id: \.offset) { _, t in
+                    Text(t)
+                        .font(.footnote)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .foregroundStyle(.secondary)
+                        .background(Color(.tertiarySystemFill), in: Capsule())
+                }
             }
-            if tags.count > 3 { Text("+\(tags.count - 3)").foregroundStyle(.tertiary) }
         }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
+        .scrollDisabled(true)
+        .mask(LinearGradient(stops: [.init(color: .black, location: 0.85), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
             }
 }
 

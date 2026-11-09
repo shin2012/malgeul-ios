@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var config: AppConfig
+    @Environment(\.isPresented) private var presented
+    @Environment(\.dismiss) private var dismissSheet
 
     var body: some View {
         NavigationStack {
@@ -25,6 +27,11 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("설정")
+            .toolbar {
+                if presented {
+                    ToolbarItem(placement: .confirmationAction) { Button("완료") { dismissSheet() } }
+                }
+            }
         }
     }
 }

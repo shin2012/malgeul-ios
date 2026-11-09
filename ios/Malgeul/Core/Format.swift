@@ -8,6 +8,14 @@ enum Fmt {
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 
+    /// 46분 34초 / 1시간 3분
+    static func durationKo(_ sec: Int) -> String {
+        let h = sec / 3600, m = (sec % 3600) / 60, s = sec % 60
+        if h > 0 { return "\(h)시간 \(m)분" }
+        if m > 0 { return s > 0 ? "\(m)분 \(s)초" : "\(m)분" }
+        return "\(s)초"
+    }
+
     static func totalDuration(_ s: Int) -> String {
         let h = s / 3600, m = (s % 3600) / 60
         return h > 0 ? "\(h)시간 \(m)분" : "\(m)분"
@@ -105,6 +113,8 @@ struct SpeakerName {
     let org: String
     let guess: Bool
     let initial: String
+    /// 이름(소속) — 추정 표시 없이
+    var display: String { org.isEmpty ? name : "\(name)(\(org))" }
 
     init(_ raw: String) {
         let t = raw.trimmingCharacters(in: .whitespaces)

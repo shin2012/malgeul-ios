@@ -2,6 +2,8 @@ import SwiftUI
 
 /// 녹음 탭: 앱에서 바로 녹음 → 끝내면 제목 정하고 업로드(선택: 바로 받아쓰기). 기기에 남은 녹음 관리.
 struct RecordTabView: View {
+    @Environment(\.isPresented) private var presented
+    @Environment(\.dismiss) private var dismissSheet
     @EnvironmentObject private var recorder: Recorder
     @EnvironmentObject private var recordings: RecordingStore
     @EnvironmentObject private var router: Router
@@ -73,6 +75,11 @@ struct RecordTabView: View {
                 }
             }
             .navigationTitle("녹음")
+            .toolbar {
+                if presented {
+                    ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismissSheet() } }
+                }
+            }
             .refreshable { recordings.reload(); device.resume() }
             .sheet(item: $recorder.finished) { r in FinishRecordingSheet(recording: r) }
             .alert("이름 변경", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { r in

@@ -116,9 +116,39 @@ struct RootView: View {
     @EnvironmentObject private var player: AudioPlayer
     @EnvironmentObject private var device: OnDeviceJobCenter
 
+    @Environment(\.horizontalSizeClass) private var hsize
+
     var body: some View {
+        root
+            .onChange(of: scenePhase) { _, phase in
+                // 앱으로 돌아오면 목록을 새로 받음 (다른 기기·웹에서 바뀐 내용 반영)
+                guard phase == .active else { return }
+                recordings.reload()
+                Task {
+                    if config.isConfigured { await store.refresh() }
+                    OnDeviceJobCenter.shared.resume()   // 공유 확장이 넣어 둔 파일 가져오기 · 기기 받아쓰기 · 멈춘 작업 이어서
+                }
+            }
+            .modifier(RootAlerts())
+    }
+
+    @ViewBuilder private var root: some View {
+        if hsize == .regular {
+            MeetingsSplitView()
+                .sheet(isPresented: Binding(get: { router.tab == .record }, set: { if !$0 { router.tab = .meetings } })) {
+                    RecordTabView()
+                }
+                .sheet(isPresented: Binding(get: { router.tab == .settings }, set: { if !$0 { router.tab = .meetings } })) {
+                    SettingsView()
+                }
+        } else {
+            tabs
+        }
+    }
+
+    private var tabs: some View {
         TabView(selection: $router.tab) {
-            Tab("회의", systemImage: "text.bubble", value: AppTab.meetings) {
+            Tab("노트", systemImage: "text.bubble", value: AppTab.meetings) {
                 MeetingsSplitView()
             }
             .badge(uploads.jobs.filter { $0.state != .failed }.count)
@@ -132,16 +162,17 @@ struct RootView: View {
                 SettingsView()
             }
         }
-        .tabViewStyle(.sidebarAdaptable)
-        .onChange(of: scenePhase) { _, phase in
-            // 앱으로 돌아오면 목록을 새로 받음 (다른 기기·웹에서 바뀐 내용 반영)
-            guard phase == .active else { return }
-            recordings.reload()
-            Task {
-                if config.isConfigured { await store.refresh() }
-                OnDeviceJobCenter.shared.resume()   // 공유 확장이 넣어 둔 파일 가져오기 · 기기 받아쓰기 · 멈춘 작업 이어서
-            }
-        }
+    }
+}
+
+/// 업로드·기기 처리·재생 오류 알림 (아이폰·아이패드 공통)
+private struct RootAlerts: ViewModifier {
+    @EnvironmentObject private var uploads: UploadCenter
+    @EnvironmentObject private var player: AudioPlayer
+    @EnvironmentObject private var device: OnDeviceJobCenter
+
+    func body(content: Content) -> some View {
+        content
         .alert("중복 파일", isPresented: Binding(get: { uploads.duplicateTitle != nil }, set: { if !$0 { uploads.duplicateTitle = nil } })) {
             Button("확인", role: .cancel) { uploads.duplicateTitle = nil }
         } message: {

@@ -5,6 +5,8 @@ private let suggestions = ["주요 결정사항을 정리해줘", "액션 아이
 /// 회의 스크립트 기반 질문 (서버 LLM 체인, SSE 스트리밍). 대화 기록은 서버에 저장됨.
 struct ChatView: View {
     let meetingID: Int
+    /// 상세 화면 탭 안: 제목 줄 없이
+    var compact = false
     @Environment(\.horizontalSizeClass) private var hsize
 
     @State private var messages: [ChatMessage] = []
@@ -17,13 +19,19 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
+            if !compact {
+                header
+                Divider()
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         if historyLoaded && messages.isEmpty { empty }
                         ForEach(messages) { m in bubble(m).id(m.id) }
+                        if compact && !messages.isEmpty && !sending {
+                            Button { confirmClear = true } label: { Label("기록 지우기", systemImage: "trash") }
+                                .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.top, 6)
+                        }
                         Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding(14)

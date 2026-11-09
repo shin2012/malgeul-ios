@@ -104,16 +104,22 @@ struct DocPanelView: View {
     @State private var errorText: String?
 
     var body: some View {
-        NavigationStack {
+        if embedded {
+            form
+        } else {
+            NavigationStack {
+                form
+                    .navigationTitle("회의록")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("완료") { dismiss() } } }
+            }
+        }
+    }
+
+    private var form: some View {
             Form {
                 reportSection
                 speakerSection
-            }
-            .navigationTitle(embedded ? "" : "회의록")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(embedded ? .hidden : .automatic, for: .navigationBar)
-            .toolbar {
-                if !embedded { ToolbarItem(placement: .confirmationAction) { Button("완료") { dismiss() } } }
             }
             .navigationDestination(isPresented: $showReport) {
                 ReportWebView(meetingID: meetingID, onSaved: { Task { await doc.refresh() } })
@@ -135,7 +141,6 @@ struct DocPanelView: View {
             .alert("오류", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
                 Button("확인", role: .cancel) {}
             } message: { Text(errorText ?? "") }
-        }
     }
 
     // MARK: 회의록 · 출장복명서
