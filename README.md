@@ -79,7 +79,7 @@ Mac 없이 GitHub Actions에서 빌드합니다.
 | `ios/**` 푸시 | 시뮬레이터 빌드(서명 없음)로 컴파일 확인 |
 | `gh workflow run ios.yml -f testflight=true` | 아카이브 → IPA → TestFlight 업로드 |
 
-- 프로젝트 파일은 `ios/gen_project.py`로 생성합니다(동기화 폴더 방식이라 `ios/Malgeul/` 안의 Swift 파일은 자동 포함). Swift 패키지: FluidAudio(화자 구분) — 0.9.1 태그는 Xcode 26 최신 컴파일러에서 동시성 오류가 나서 main 커밋 `e63b523`에 고정.
+- 프로젝트 파일은 `ios/gen_project.py`로 생성합니다(동기화 폴더 방식이라 `ios/Malgeul/` 안의 Swift 파일은 자동 포함). Swift 패키지: FluidAudio(화자 구분) — 포크 `shin2012/FluidAudio`의 `malgeul` 브랜치(main `e63b523` + 받아쓰기 정규화용 NemoTextProcessing 바이너리 제거: 배포 파일이 504로 자주 실패하고 쓰지 않음)에 고정. 0.9.1 태그는 Xcode 26 최신 컴파일러에서 동시성 오류.
 - 순수 로직 시험(맞추기·유사도): `ios/LogicTests/run.sh` (리눅스 Swift 툴체인)
 - 필요한 저장소 비밀값: `ASC_KEY_P8`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `APPLE_TEAM_ID`
 - 번들 ID: `kr.b-612.malgeul` (앱), `kr.b-612.malgeul.share` (공유 확장)

@@ -454,10 +454,10 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		1A0000000000000000000050 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			repositoryURL = "https://github.com/shin2012/FluidAudio.git";
 			requirement = {
 				kind = revision;
-				revision = e63b5230ee7d7428848ab17d76a57c6197836684;
+				revision = 455f57ccb797826372f84936d6b58f4b337976b8;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
