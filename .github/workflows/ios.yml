@@ -19,11 +19,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | grep -viE "beta|_RC" | sort -V | tail -1)"
+      - name: Swift 패키지 받기 (재시도)
+        working-directory: ios
+        run: |
+          for i in 1 2 3 4; do
+            if xcodebuild -resolvePackageDependencies -project Malgeul.xcodeproj -scheme Malgeul -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" > resolve.log 2>&1; then
+              tail -5 resolve.log; exit 0
+            fi
+            echo "패키지 받기 실패 $i — 다시 시도"; tail -25 resolve.log; sleep 20
+          done
+          exit 1
       - name: 빌드 (시뮬레이터, 서명 없음)
         working-directory: ios
         run: |
           set -o pipefail
-          xcodebuild -project Malgeul.xcodeproj -scheme Malgeul \
+          xcodebuild -project Malgeul.xcodeproj -scheme Malgeul -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
             -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO -IDEBuildingContinueBuildingAfterErrors=YES build 2>&1 | tee build.log | grep -E "error:|warning:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build.log
@@ -96,18 +106,28 @@ jobs:
                   req(f"https://api.appstoreconnect.apple.com/v1/certificates/{c['id']}", "DELETE")
                   print("  -> 지움")
           PY
+      - name: Swift 패키지 받기 (재시도)
+        working-directory: ios
+        run: |
+          for i in 1 2 3 4; do
+            if xcodebuild -resolvePackageDependencies -project Malgeul.xcodeproj -scheme Malgeul -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" > resolve.log 2>&1; then
+              tail -5 resolve.log; exit 0
+            fi
+            echo "패키지 받기 실패 $i — 다시 시도"; tail -25 resolve.log; sleep 20
+          done
+          exit 1
       - name: 아카이브 (자동 서명)
         working-directory: ios
         run: |
           set -o pipefail
-          xcodebuild -project Malgeul.xcodeproj -scheme Malgeul -configuration Release \
+          xcodebuild -project Malgeul.xcodeproj -scheme Malgeul -configuration Release -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
             -destination 'generic/platform=iOS' -archivePath $RUNNER_TEMP/App.xcarchive \
             DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Automatic \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
             -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID \
-            archive 2>&1 | tee archive.log | grep -E "error:|ARCHIVE" || true
+            archive 2>&1 | tee archive.log | grep -E -A3 "error:|ARCHIVE" || true
           grep -q "ARCHIVE SUCCEEDED" archive.log
       - name: IPA 만들기
         run: |
