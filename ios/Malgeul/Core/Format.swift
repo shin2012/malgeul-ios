@@ -26,6 +26,25 @@ enum Fmt {
     }()
     static func date(_ d: Date?) -> String { d.map { dateFmt.string(from: $0) } ?? "—" }
 
+    private static let whenFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = "M월 d일 (E) a h:mm"
+        return f
+    }()
+    private static let whenYearFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = "yyyy년 M월 d일 (E) a h:mm"
+        return f
+    }()
+    /// 11월 4일 (수) 오전 10:00 — 올해가 아니면 연도 포함 (웹과 같음)
+    static func when(_ d: Date?) -> String {
+        guard let d else { return "" }
+        let sameYear = Calendar.current.component(.year, from: d) == Calendar.current.component(.year, from: .now)
+        return (sameYear ? whenFmt : whenYearFmt).string(from: d)
+    }
+
     /// 웹과 같은 상대 시각: N초 전 / N분 전 / N시간 전 / N일 전
     static func relative(_ d: Date?, now: Date = .now) -> String {
         guard let d else { return "—" }
@@ -67,8 +86,8 @@ enum Fmt {
 }
 
 extension ShapeStyle where Self == Color {
-    /// 웹과 같은 강조색 #D4622A
-    static var accentMalgeul: Color { Color(red: 0xD4 / 255, green: 0x62 / 255, blue: 0x2A / 255) }
+    /// 웹과 같은 강조색 #3451D1 (남색)
+    static var accentMalgeul: Color { Color(red: 0x34 / 255, green: 0x51 / 255, blue: 0xD1 / 255) }
 }
 
 extension Color {
@@ -78,19 +97,46 @@ extension Color {
     }
 }
 
-/// 웹과 같은 화자 색 순서
-enum SpeakerPalette {
-    static let colors: [UInt32] = [0xD4622A, 0x2563EB, 0x16A34A, 0x9333EA, 0xCA8A04, 0x0891B2, 0xDB2777, 0x65A30D]
-    static func color(_ speaker: String, in all: [String]) -> Color {
-        let i = all.firstIndex(of: speaker) ?? 0
-        return Color(hex: colors[i % colors.count])
+/// 화자 라벨 해석 (웹 parseSpeaker와 같음)
+///  "김용섭이사(프레임아웃, 추정)" → 이름 "김용섭 이사", 소속 "프레임아웃", 추정
+///  "Speaker A" → "화자 A"
+struct SpeakerName {
+    let name: String
+    let org: String
+    let guess: Bool
+    let initial: String
+
+    init(_ raw: String) {
+        let t = raw.trimmingCharacters(in: .whitespaces)
+        if let m = t.wholeMatch(of: #/(?i)speaker\s+([A-Z0-9]+)/#) {
+            name = "화자 \(m.1)"; org = ""; guess = false; initial = String(m.1); return
+        }
+        var n = t, o = "", g = false
+        if let m = t.wholeMatch(of: #/(.*?)\s*\((.*)\)\s*/#) {
+            n = String(m.1)
+            let parts = m.2.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            g = parts.contains("추정")
+            o = parts.filter { $0 != "추정" }.joined(separator: ", ")
+        }
+        if let m = n.wholeMatch(of: #/([가-힣]{2,4}?)(이사|팀장|부장|과장|차장|대리|사원|실장|처장|본부장|대표|선생님|주임|책임|선임|수석|위원|소장|원장|교수|박사)/#) {
+            n = "\(m.1) \(m.2)"
+        }
+        name = n.isEmpty ? t : n; org = o; guess = g
+        initial = String((n.isEmpty ? t : n).prefix(1))
     }
 }
 
-/// 태그 색 (웹과 동일 5색 순환)
-enum TagPalette {
-    static let colors: [UInt32] = [0xD4622A, 0x2563EB, 0x16A34A, 0x9333EA, 0xCA8A04]
-    static func color(_ i: Int) -> Color { Color(hex: colors[i % colors.count]) }
+/// 이니셜 원형 (회색)
+struct SpeakerAvatar: View {
+    let initial: String
+    var size: CGFloat = 30
+    var body: some View {
+        Text(initial)
+            .font(.system(size: size * 0.42, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: size, height: size)
+            .background(Color(.tertiarySystemFill), in: Circle())
+    }
 }
 
 enum StatusInfo {
@@ -105,8 +151,7 @@ enum StatusInfo {
     }
     static func color(_ s: String) -> Color {
         switch s {
-        case "processing": return .blue
-        case "done": return .green
+        case "processing": return .accentMalgeul
         case "error": return .red
         default: return .secondary
         }

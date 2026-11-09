@@ -315,7 +315,7 @@ struct ShareView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     switch model.phase {
                     case .sending: ProgressView()
-                    case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(.secondary)
                     default:
                         Button(model.copyMode ? "담기" : "보내기") { model.send() }
                             .fontWeight(.semibold)
@@ -324,7 +324,7 @@ struct ShareView: View {
                 }
             }
         }
-        .tint(Color(red: 0xD4 / 255, green: 0x62 / 255, blue: 0x2A / 255))
+        .tint(Color(red: 0x34 / 255, green: 0x51 / 255, blue: 0xD1 / 255))
     }
 
     private func size(_ b: Int64) -> String {

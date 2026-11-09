@@ -32,7 +32,7 @@ struct ProcessingSection: View {
                 }
             }
             if !SharedInbox.available && config.shareAction != .upload {
-                Text("앱 그룹이 아직 준비되지 않아 공유 메뉴에서는 바로 올리기만 됩니다.").font(.caption).foregroundStyle(.orange)
+                Text("앱 그룹이 아직 준비되지 않아 공유 메뉴에서는 바로 올리기만 됩니다.").font(.caption).foregroundStyle(.secondary)
             }
         } header: {
             Text("처리 방식")
@@ -49,7 +49,7 @@ struct ProcessingSection: View {
                             if let p = speechProgress { Text("\(Int(p * 100))%").monospacedDigit() }
                         }
                     } else {
-                        Text(speechState).foregroundStyle(speechInstalled ? Color.green : Color.secondary)
+                        Text(speechState).foregroundStyle(speechInstalled ? Color.primary : Color.secondary)
                     }
                 }
                 if !speechInstalled && !speechBusy {
@@ -57,7 +57,7 @@ struct ProcessingSection: View {
                 }
                 LabeledContent("화자 구분 모델") {
                     if diarizerBusy { ProgressView().controlSize(.small) }
-                    else { Text(diarizerReady ? "준비됨" : "받지 않음 (약 100MB)").foregroundStyle(diarizerReady ? Color.green : Color.secondary) }
+                    else { Text(diarizerReady ? "준비됨" : "받지 않음 (약 100MB)").foregroundStyle(diarizerReady ? Color.primary : Color.secondary) }
                 }
                 if !diarizerReady && !diarizerBusy {
                     Button("화자 구분 모델 받기") { Task { await prepareDiarizer() } }

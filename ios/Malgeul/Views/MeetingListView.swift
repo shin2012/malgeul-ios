@@ -185,10 +185,10 @@ struct MeetingListView: View {
         }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) { deleteOne = m } label: { Label("삭제", systemImage: "trash") }
-            Button { beginRename(m) } label: { Label("제목", systemImage: "pencil") }.tint(.orange)
+            Button { beginRename(m) } label: { Label("제목", systemImage: "pencil") }.tint(.gray)
         }
         .swipeActions(edge: .leading) {
-            Button { editingDate = m } label: { Label("녹음 시각", systemImage: "calendar") }.tint(.blue)
+            Button { editingDate = m } label: { Label("녹음 시각", systemImage: "calendar") }.tint(.accentMalgeul)
         }
         .contextMenu {
             Button { beginRename(m) } label: { Label("제목 수정", systemImage: "pencil") }
@@ -264,9 +264,9 @@ struct MeetingListView: View {
 
     private func engineButton(_ e: TranscribeEngine) -> String {
         switch e {
-        case .assemblyai: return "AssemblyAI"
-        case .local: return "🖥 로컬"
-        case .device: return "📱 이 기기에서"
+        case .assemblyai: return "클라우드 (AssemblyAI)"
+        case .local: return "이 서버 (로컬)"
+        case .device: return "이 기기에서"
         }
     }
 
@@ -331,16 +331,15 @@ struct MeetingRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(meeting.title)
                     .font(.headline)
+                    .foregroundStyle(meeting.isDone ? Color.primary : Color.secondary)
                     .lineLimit(2)
                 Spacer(minLength: 8)
                 StatusBadge(status: meeting.status)
             }
+            meta
             if !meeting.tags.isEmpty {
                 TagRow(tags: meeting.tags)
-            } else if let f = meeting.originalFilename {
-                Text(f).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
-            meta
             if let job = device.job(for: meeting.id) {
                 DeviceJobLine(job: job)
             } else if meeting.isProcessing {
@@ -353,31 +352,20 @@ struct MeetingRow: View {
         .padding(.vertical, 2)
     }
 
-    /// 두 줄 고정: (길이 · 크기 · 비용) / (녹음 시각 · 등록 상대 시각)
+    /// 한 줄: 녹음 시각 · 길이 (웹과 같음). 비용은 설정 > 사용량
     private var meta: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 12) {
-                Label(Fmt.duration(meeting.durationSeconds), systemImage: "clock")
-                if meeting.isCompressing {
-                    HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("압축 중") }
-                } else {
-                    Label(Fmt.size(meeting.fileSizeBytes), systemImage: "doc")
-                }
-                if let c = meeting.costUsd {
-                    Text(Fmt.krw(c, rate: store.krwRate).map { "\(Fmt.usd(c)) ≈ \($0)" } ?? Fmt.usd(c))
-                }
-            }
-            HStack(spacing: 12) {
-                Label(Fmt.date(meeting.recordedOrCreated), systemImage: "calendar")
-                TimelineView(.periodic(from: .now, by: 30)) { ctx in
-                    Text("등록 \(Fmt.relative(meeting.createdAt, now: ctx.date))")
-                }
+        HStack(spacing: 10) {
+            Text(Fmt.when(meeting.recordedOrCreated))
+            if (meeting.durationSeconds ?? 0) > 0 { Text(Fmt.duration(meeting.durationSeconds)) }
+            if meeting.isCompressing {
+                HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("파일 준비 중") }
+            } else if meeting.status == "pending" {
+                Text("받아쓰기 전").foregroundStyle(Color.accentMalgeul)
             }
         }
-        .labelStyle(CompactLabel())
         .lineLimit(1)
         .monospacedDigit()
-        .font(.caption)
+        .font(.subheadline)
         .foregroundStyle(.secondary)
     }
 }
@@ -395,6 +383,10 @@ struct CompactLabel: LabelStyle {
 struct StatusBadge: View {
     let status: String
     var body: some View {
+        // 완료·대기는 표시하지 않음 (처리 중·오류만)
+        if status == "processing" || status == "error" { badge }
+    }
+    private var badge: some View {
         Text(StatusInfo.label(status))
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 7).padding(.vertical, 3)
@@ -406,18 +398,15 @@ struct StatusBadge: View {
 struct TagRow: View {
     let tags: [String]
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 5) {
-                ForEach(Array(tags.enumerated()), id: \.offset) { i, t in
-                    Text(t)
-                        .font(.caption2.weight(.medium))
-                        .padding(.horizontal, 7).padding(.vertical, 2)
-                        .foregroundStyle(TagPalette.color(i))
-                        .background(TagPalette.color(i).opacity(0.1), in: Capsule())
-                        .overlay(Capsule().stroke(TagPalette.color(i).opacity(0.3), lineWidth: 0.5))
-                }
+        HStack(spacing: 8) {
+            ForEach(Array(tags.prefix(3).enumerated()), id: \.offset) { _, t in
+                Text("#\(t)")
             }
+            if tags.count > 3 { Text("+\(tags.count - 3)").foregroundStyle(.tertiary) }
         }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
             }
 }
 
@@ -547,17 +536,9 @@ struct StatsFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 12) {
-                Text("전체 \(store.meetings.count)건")
-                Text("완료 \(store.doneCount)건")
-                if store.totalDuration > 0 { Text("총 길이 \(Fmt.totalDuration(store.totalDuration))") }
+                Text("노트 \(store.meetings.count)개")
+                if store.totalDuration > 0 { Text("총 \(Fmt.totalDuration(store.totalDuration))") }
             }
-            if store.totalCost > 0 {
-                HStack(spacing: 4) {
-                    Text("누적 비용 \(Fmt.usd(store.totalCost))")
-                    if let k = Fmt.krw(store.totalCost, rate: store.krwRate) { Text("≈ \(k)") }
-                }
-            }
-            if let r = store.krwRate { Text("환율 1$ = \(Fmt.number(r))원") }
         }
         .monospacedDigit()
         .padding(.top, 4)

@@ -15,6 +15,7 @@ struct SettingsView: View {
                 }
 
                 ProcessingSection()
+                UsageSection()
 
                 Section("정보") {
                     LabeledContent("버전", value: "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
@@ -28,6 +29,27 @@ struct SettingsView: View {
     }
 }
 
+/// 사용량: 이번 달·전체 받아쓰기 비용 (웹 설정 > 사용량과 같음)
+private struct UsageSection: View {
+    @EnvironmentObject private var store: MeetingStore
+    var body: some View {
+        let cal = Calendar.current
+        let month = store.meetings.filter { m in m.createdAt.map { cal.isDate($0, equalTo: .now, toGranularity: .month) } ?? false }
+        let mc = month.reduce(0) { $0 + ($1.costUsd ?? 0) }
+        Section {
+            LabeledContent("이번 달") { Text(costText(mc) + " · \(month.count)건").monospacedDigit() }
+            LabeledContent("전체") { Text(costText(store.totalCost) + " · \(store.meetings.count)건").monospacedDigit() }
+        } header: {
+            Text("사용량")
+        } footer: {
+            if let r = store.krwRate { Text("환율 1달러 = \(Fmt.number(r))원") }
+        }
+    }
+    private func costText(_ usd: Double) -> String {
+        Fmt.krw(usd, rate: store.krwRate) ?? String(format: "$%.2f", usd)
+    }
+}
+
 /// 연결 상태 점: 초록 = 연결됨, 빨강 = 안 됨, 회색 = 주소 없음, 주황 깜빡임 = 확인 중
 struct StatusDot: View {
     enum Kind: Equatable { case ok, fail, none, checking }
@@ -38,7 +60,7 @@ struct StatusDot: View {
         case .ok: return .green
         case .fail: return .red
         case .none: return Color.secondary.opacity(0.4)
-        case .checking: return .orange
+        case .checking: return .secondary
         }
     }
 

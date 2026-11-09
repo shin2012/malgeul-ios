@@ -90,6 +90,8 @@ private func typeName(_ t: String?) -> String { typeLabel.first { $0.0 == t }?.1
 struct DocPanelView: View {
     let meetingID: Int
     @ObservedObject var doc: DocModel
+    /// 상세 화면 오른쪽 패널 안에 들어갈 때(제목·완료 버튼 없음)
+    var embedded = false
     @Environment(\.dismiss) private var dismiss
 
     @State private var type = "auto"
@@ -107,10 +109,11 @@ struct DocPanelView: View {
                 reportSection
                 speakerSection
             }
-            .navigationTitle("문서")
+            .navigationTitle(embedded ? "" : "회의록")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(embedded ? .hidden : .automatic, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("완료") { dismiss() } }
+                if !embedded { ToolbarItem(placement: .confirmationAction) { Button("완료") { dismiss() } } }
             }
             .navigationDestination(isPresented: $showReport) {
                 ReportWebView(meetingID: meetingID, onSaved: { Task { await doc.refresh() } })

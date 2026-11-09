@@ -33,7 +33,7 @@ struct RecordTabView: View {
                         }
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) { deleting = r } label: { Label("삭제", systemImage: "trash") }
-                                Button { renameText = r.title; renaming = r } label: { Label("이름", systemImage: "pencil") }.tint(.orange)
+                                Button { renameText = r.title; renaming = r } label: { Label("이름", systemImage: "pencil") }.tint(.gray)
                             }
                             .swipeActions(edge: .leading) {
                                 if r.meetingID == nil && uploads.isUploading(recordingID: r.id) == nil && config.isConfigured {
@@ -252,11 +252,11 @@ struct RecordingRow: View {
             }
         } else if let id = recording.meetingID {
             Button { router.meetingID = id; router.tab = .meetings } label: {
-                Label("업로드됨", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.green)
+                Label("업로드됨", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
         } else {
-            Label("기기에만 있음", systemImage: "iphone").font(.caption).foregroundStyle(.orange)
+            Label("기기에만 있음", systemImage: "iphone").font(.caption).foregroundStyle(Color.accentMalgeul)
         }
     }
 }
