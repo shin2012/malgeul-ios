@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // 백그라운드 업로드 세션을 앱 시작 때 다시 연결해 둠 (끝난 업로드 결과 수신)
         Task { @MainActor in _ = UploadCenter.shared }
+        // 애플워치 녹음 받기 (앱이 꺼져 있으면 시스템이 백그라운드로 깨워 전달)
+        WatchLink.shared.activate()
         return true
     }
 

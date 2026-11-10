@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates ios/Malgeul.xcodeproj (app + share extension, synchronized folders)."""
+"""Generates ios/Malgeul.xcodeproj (app + share extension + watch app, synchronized folders)."""
 import os
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +58,35 @@ def target_settings(kind: str) -> dict:
         "SWIFT_EMIT_LOC_STRINGS": "YES",
         "SWIFT_VERSION": "5.0",
         "TARGETED_DEVICE_FAMILY": '"1,2"',
+    }
+
+
+def watch_settings() -> dict:
+    return {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": '""',
+        "ENABLE_PREVIEWS": "YES",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_FILE": '"Config/Watch-Info.plist"',
+        "INFOPLIST_KEY_CFBundleDisplayName": '"말글"',
+        "INFOPLIST_KEY_NSMicrophoneUsageDescription": '"워치로 회의를 녹음해 아이폰 말글로 보낼 때 마이크를 사용해요."',
+        "INFOPLIST_KEY_NSLocationWhenInUseUsageDescription": '"녹음한 장소를 녹음 기록에 함께 남기려고 위치를 사용해요."',
+        "INFOPLIST_KEY_UISupportedInterfaceOrientations": '"UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"',
+        "INFOPLIST_KEY_WKCompanionAppBundleIdentifier": f'"{APP_ID}"',
+        "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t)',
+        "MARKETING_VERSION": "1.5.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}.watchkitapp"',
+        "PRODUCT_NAME": '"$(TARGET_NAME)"',
+        "SDKROOT": "watchos",
+        "SKIP_INSTALL": "YES",
+        "SUPPORTED_PLATFORMS": '"watchos watchsimulator"',
+        "SWIFT_EMIT_LOC_STRINGS": "YES",
+        "SWIFT_VERSION": "5.0",
+        "TARGETED_DEVICE_FAMILY": "4",
+        "WATCHOS_DEPLOYMENT_TARGET": "10.0",
     }
 
 
@@ -134,12 +163,15 @@ pbx = f"""// !$*UTF8*$!
 
 /* Begin PBXBuildFile section */
 \t\t{I(0x30)} /* MalgeulShare.appex in Embed Foundation Extensions */ = {{isa = PBXBuildFile; fileRef = {I(0x20)} /* MalgeulShare.appex */; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy, ); }}; }};
+\t\t{I(0x69)} /* MalgeulWatch.app in Embed Watch Content */ = {{isa = PBXBuildFile; fileRef = {I(0x60)} /* MalgeulWatch.app */; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy, ); }}; }};
 \t\t{I(0x51)} /* FluidAudio in Frameworks */ = {{isa = PBXBuildFile; productRef = {I(0x52)} /* FluidAudio */; }};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 \t\t{I(0x01)} /* Malgeul.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Malgeul.app; sourceTree = BUILT_PRODUCTS_DIR; }};
 \t\t{I(0x20)} /* MalgeulShare.appex */ = {{isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MalgeulShare.appex; sourceTree = BUILT_PRODUCTS_DIR; }};
+\t\t{I(0x60)} /* MalgeulWatch.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MalgeulWatch.app; sourceTree = BUILT_PRODUCTS_DIR; }};
+\t\t{I(0x6D)} /* Watch-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Watch-Info.plist"; sourceTree = "<group>"; }};
 \t\t{I(0x0B)} /* Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; }};
 \t\t{I(0x0C)} /* Share-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Share-Info.plist"; sourceTree = "<group>"; }};
 \t\t{I(0x0D)} /* Malgeul.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Malgeul.entitlements; sourceTree = "<group>"; }};
@@ -149,6 +181,7 @@ pbx = f"""// !$*UTF8*$!
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 \t\t{I(0x02)} /* Malgeul */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = Malgeul; sourceTree = "<group>"; }};
 \t\t{I(0x21)} /* MalgeulShare */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulShare; sourceTree = "<group>"; }};
+\t\t{I(0x61)} /* MalgeulWatch */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulWatch; sourceTree = "<group>"; }};
 \t\t{I(0x40)} /* Shared */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; }};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
@@ -164,6 +197,17 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tname = "Embed Foundation Extensions";
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};
+\t\t{I(0x6A)} /* Embed Watch Content */ = {{
+\t\t\tisa = PBXCopyFilesBuildPhase;
+\t\t\tbuildActionMask = 2147483647;
+\t\t\tdstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+\t\t\tdstSubfolderSpec = 16;
+\t\t\tfiles = (
+\t\t\t\t{I(0x69)} /* MalgeulWatch.app in Embed Watch Content */,
+\t\t\t);
+\t\t\tname = "Embed Watch Content";
+\t\t\trunOnlyForDeploymentPostprocessing = 0;
+\t\t}};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXContainerItemProxy section */
@@ -174,6 +218,13 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tremoteGlobalIDString = {I(0x25)};
 \t\t\tremoteInfo = MalgeulShare;
 \t\t}};
+\t\t{I(0x6B)} /* PBXContainerItemProxy */ = {{
+\t\t\tisa = PBXContainerItemProxy;
+\t\t\tcontainerPortal = {I(0x09)} /* Project object */;
+\t\t\tproxyType = 1;
+\t\t\tremoteGlobalIDString = {I(0x65)};
+\t\t\tremoteInfo = MalgeulWatch;
+\t\t}};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
@@ -182,11 +233,17 @@ pbx = f"""// !$*UTF8*$!
 \t\t\ttarget = {I(0x25)} /* MalgeulShare */;
 \t\t\ttargetProxy = {I(0x32)} /* PBXContainerItemProxy */;
 \t\t}};
+\t\t{I(0x6C)} /* PBXTargetDependency */ = {{
+\t\t\tisa = PBXTargetDependency;
+\t\t\ttarget = {I(0x65)} /* MalgeulWatch */;
+\t\t\ttargetProxy = {I(0x6B)} /* PBXContainerItemProxy */;
+\t\t}};
 /* End PBXTargetDependency section */
 
 /* Begin PBXFrameworksBuildPhase section */
 {phase(I(0x03), "PBXFrameworksBuildPhase", "Frameworks", f"\t\t\t\t{I(0x51)} /* FluidAudio in Frameworks */,\n")}
 {phase(I(0x23), "PBXFrameworksBuildPhase", "Frameworks")}
+{phase(I(0x63), "PBXFrameworksBuildPhase", "Frameworks")}
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -195,6 +252,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tchildren = (
 \t\t\t\t{I(0x02)} /* Malgeul */,
 \t\t\t\t{I(0x21)} /* MalgeulShare */,
+\t\t\t\t{I(0x61)} /* MalgeulWatch */,
 \t\t\t\t{I(0x40)} /* Shared */,
 \t\t\t\t{I(0x0A)} /* Config */,
 \t\t\t\t{I(0x05)} /* Products */,
@@ -208,6 +266,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x0C)} /* Share-Info.plist */,
 \t\t\t\t{I(0x0D)} /* Malgeul.entitlements */,
 \t\t\t\t{I(0x0E)} /* Share.entitlements */,
+\t\t\t\t{I(0x6D)} /* Watch-Info.plist */,
 \t\t\t);
 \t\t\tpath = Config;
 \t\t\tsourceTree = "<group>";
@@ -217,6 +276,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tchildren = (
 \t\t\t\t{I(0x01)} /* Malgeul.app */,
 \t\t\t\t{I(0x20)} /* MalgeulShare.appex */,
+\t\t\t\t{I(0x60)} /* MalgeulWatch.app */,
 \t\t\t);
 \t\t\tname = Products;
 \t\t\tsourceTree = "<group>";
@@ -232,11 +292,13 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x03)} /* Frameworks */,
 \t\t\t\t{I(0x08)} /* Resources */,
 \t\t\t\t{I(0x31)} /* Embed Foundation Extensions */,
+\t\t\t\t{I(0x6A)} /* Embed Watch Content */,
 \t\t\t);
 \t\t\tbuildRules = (
 \t\t\t);
 \t\t\tdependencies = (
 \t\t\t\t{I(0x33)} /* PBXTargetDependency */,
+\t\t\t\t{I(0x6C)} /* PBXTargetDependency */,
 \t\t\t);
 \t\t\tfileSystemSynchronizedGroups = (
 \t\t\t\t{I(0x02)} /* Malgeul */,
@@ -273,6 +335,28 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tproductReference = {I(0x20)} /* MalgeulShare.appex */;
 \t\t\tproductType = "com.apple.product-type.app-extension";
 \t\t}};
+\t\t{I(0x65)} /* MalgeulWatch */ = {{
+\t\t\tisa = PBXNativeTarget;
+\t\t\tbuildConfigurationList = {I(0x68)} /* Build configuration list for PBXNativeTarget "MalgeulWatch" */;
+\t\t\tbuildPhases = (
+\t\t\t\t{I(0x62)} /* Sources */,
+\t\t\t\t{I(0x63)} /* Frameworks */,
+\t\t\t\t{I(0x64)} /* Resources */,
+\t\t\t);
+\t\t\tbuildRules = (
+\t\t\t);
+\t\t\tdependencies = (
+\t\t\t);
+\t\t\tfileSystemSynchronizedGroups = (
+\t\t\t\t{I(0x61)} /* MalgeulWatch */,
+\t\t\t);
+\t\t\tname = MalgeulWatch;
+\t\t\tpackageProductDependencies = (
+\t\t\t);
+\t\t\tproductName = MalgeulWatch;
+\t\t\tproductReference = {I(0x60)} /* MalgeulWatch.app */;
+\t\t\tproductType = "com.apple.product-type.application";
+\t\t}};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -287,6 +371,9 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t\t\tCreatedOnToolsVersion = 16.0;
 \t\t\t\t\t}};
 \t\t\t\t\t{I(0x25)} = {{
+\t\t\t\t\t\tCreatedOnToolsVersion = 16.0;
+\t\t\t\t\t}};
+\t\t\t\t\t{I(0x65)} = {{
 \t\t\t\t\t\tCreatedOnToolsVersion = 16.0;
 \t\t\t\t\t}};
 \t\t\t\t}};
@@ -310,6 +397,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\ttargets = (
 \t\t\t\t{I(0x06)} /* Malgeul */,
 \t\t\t\t{I(0x25)} /* MalgeulShare */,
+\t\t\t\t{I(0x65)} /* MalgeulWatch */,
 \t\t\t);
 \t\t}};
 /* End PBXProject section */
@@ -317,11 +405,13 @@ pbx = f"""// !$*UTF8*$!
 /* Begin PBXResourcesBuildPhase section */
 {phase(I(0x08), "PBXResourcesBuildPhase", "Resources")}
 {phase(I(0x24), "PBXResourcesBuildPhase", "Resources")}
+{phase(I(0x64), "PBXResourcesBuildPhase", "Resources")}
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 {phase(I(0x07), "PBXSourcesBuildPhase", "Sources")}
 {phase(I(0x22), "PBXSourcesBuildPhase", "Sources")}
+{phase(I(0x62), "PBXSourcesBuildPhase", "Sources")}
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -331,6 +421,8 @@ pbx = f"""// !$*UTF8*$!
 {config(I(0x15), "Release", target_settings("app"))}
 {config(I(0x26), "Debug", target_settings("share"))}
 {config(I(0x27), "Release", target_settings("share"))}
+{config(I(0x66), "Debug", watch_settings())}
+{config(I(0x67), "Release", watch_settings())}
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -357,6 +449,15 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tbuildConfigurations = (
 \t\t\t\t{I(0x26)} /* Debug */,
 \t\t\t\t{I(0x27)} /* Release */,
+\t\t\t);
+\t\t\tdefaultConfigurationIsVisible = 0;
+\t\t\tdefaultConfigurationName = Release;
+\t\t}};
+\t\t{I(0x68)} /* Build configuration list for PBXNativeTarget "MalgeulWatch" */ = {{
+\t\t\tisa = XCConfigurationList;
+\t\t\tbuildConfigurations = (
+\t\t\t\t{I(0x66)} /* Debug */,
+\t\t\t\t{I(0x67)} /* Release */,
 \t\t\t);
 \t\t\tdefaultConfigurationIsVisible = 0;
 \t\t\tdefaultConfigurationName = Release;

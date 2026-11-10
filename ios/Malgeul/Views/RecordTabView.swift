@@ -242,6 +242,10 @@ struct RecordingRow: View {
                 Text(recording.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Text("\(Fmt.date(recording.startedAt)) · \(Fmt.clock(recording.duration)) · \(Fmt.size(recording.fileSize))")
                     .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                if recording.fromWatch == true || recording.place != nil {
+                    Label(recording.place ?? "장소 없음", systemImage: recording.fromWatch == true ? "applewatch" : "mappin.and.ellipse")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
                 status
             }
         }
@@ -287,6 +291,8 @@ struct FinishRecordingSheet: View {
                 Section {
                     LabeledContent("길이", value: Fmt.clock(recording.duration))
                     LabeledContent("녹음 시각", value: Fmt.date(recording.startedAt))
+                    if let p = recording.place { LabeledContent("장소", value: p) }
+                    if recording.fromWatch == true { LabeledContent("녹음 기기", value: "애플워치") }
                     LabeledContent("크기", value: Fmt.size(recording.fileSize))
                 }
                 Section {

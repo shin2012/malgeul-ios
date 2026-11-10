@@ -34,7 +34,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project Malgeul.xcodeproj -scheme Malgeul -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
-            -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO -IDEBuildingContinueBuildingAfterErrors=YES build 2>&1 | tee build.log | grep -E "error:|warning:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build.log
 
@@ -72,7 +72,7 @@ jobs:
                                          headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
               with urllib.request.urlopen(r) as f:
                   return json.loads(f.read() or b"{}")
-          for ident, name in [("kr.b-612.malgeul", "Malgeul"), ("kr.b-612.malgeul.share", "Malgeul Share")]:
+          for ident, name in [("kr.b-612.malgeul", "Malgeul"), ("kr.b-612.malgeul.share", "Malgeul Share"), ("kr.b-612.malgeul.watchkitapp", "Malgeul Watch")]:
               found = req(f"https://api.appstoreconnect.apple.com/v1/bundleIds?filter[identifier]={ident}")["data"]
               if any(b["attributes"]["identifier"] == ident for b in found):
                   print("있음", ident); continue

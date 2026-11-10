@@ -9,6 +9,11 @@ struct Recording: Codable, Identifiable, Equatable {
     var duration: TimeInterval
     var meetingID: Int?
     var uploadedAt: Date?
+    /// 애플워치 녹음: 녹음 시작 위치 (예전 기록에는 없음)
+    var place: String?
+    var latitude: Double?
+    var longitude: Double?
+    var fromWatch: Bool?
 
     var fileURL: URL { RecordingStore.folder.appending(path: id) }
     var fileSize: Int? { (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.intValue }
@@ -83,6 +88,25 @@ final class RecordingStore: ObservableObject {
     }
 
     func add(_ r: Recording) { items.insert(r, at: 0); save() }
+
+    /// 워치가 보낸 녹음 (파일은 이미 녹음 폴더에 있음) → 목록에 넣고 서버 설정이 있으면 바로 올림
+    func addFromWatch(id: String, startedAt: Date, duration: TimeInterval, place: String?, latitude: Double?, longitude: Double?) {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = "M월 d일 HH:mm"
+        var title = "워치 녹음 \(f.string(from: startedAt))"
+        if let place { title += " · \(place)" }
+        var dur = duration
+        if dur <= 0 { dur = (try? AVAudioPlayer(contentsOf: Self.folder.appending(path: id)))?.duration ?? 0 }
+        let r = Recording(id: id, title: title, startedAt: startedAt, duration: dur,
+                          place: place, latitude: latitude, longitude: longitude, fromWatch: true)
+        items.removeAll { $0.id == id }
+        add(r)
+        items.sort { $0.startedAt > $1.startedAt }
+        if AppConfig.shared.isConfigured {
+            upload(r, autoTranscribe: AppConfig.shared.autoTranscribeRecordings)
+        }
+    }
 
     func rename(_ id: String, title: String) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
