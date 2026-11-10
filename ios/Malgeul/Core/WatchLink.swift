@@ -40,10 +40,7 @@ final class WatchLink: NSObject, WCSessionDelegate {
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 // 앱이 백그라운드에서 깨어났을 때 업로드 준비(중복 확인·본문 만들기)가 끝날 시간을 확보
-                var bg = UIBackgroundTaskIdentifier.invalid
-                bg = UIApplication.shared.beginBackgroundTask(withName: "watch-recording") {
-                    UIApplication.shared.endBackgroundTask(bg)
-                }
+                let bg = UIApplication.shared.beginBackgroundTask(withName: "watch-recording", expirationHandler: nil)
                 RecordingStore.shared.addFromWatch(id: name, startedAt: at, duration: dur, place: place, latitude: la, longitude: lo)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 25) { UIApplication.shared.endBackgroundTask(bg) }
             }
