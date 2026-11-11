@@ -11,7 +11,6 @@ struct UploadJob: Codable, Identifiable, Equatable {
     var state: State = .analyzing
     var progress: Double = 0
     var message: String?
-    var viaTailscale = false
     var recordedAt: Date?
     var autoTranscribe = false
     var recordingID: String?
@@ -25,13 +24,12 @@ struct UploadJob: Codable, Identifiable, Equatable {
     var title: String { (filename as NSString).deletingPathExtension }
 }
 
-/// 파일 업로드: 중복 확인(SHA-256) → 경로 선택(100MB 초과는 Tailscale 직통) → 백그라운드 URLSession 업로드.
+/// 파일 업로드: 중복 확인(SHA-256) → 95MB 넘으면 음성만 압축 → 백그라운드 URLSession 업로드.
 /// 앱이 백그라운드로 가거나 시스템이 앱을 내려도 업로드는 계속됨.
 @MainActor
 final class UploadCenter: NSObject, ObservableObject {
     static let shared = UploadCenter()
     static let sessionID = "kr.b-612.malgeul.upload"
-    static let hundredMB = UploadKit.hundredMB
 
     @Published private(set) var jobs: [UploadJob] = []
     /// 중복 파일 알림 (기존 회의 제목)
@@ -154,18 +152,9 @@ final class UploadCenter: NSObject, ObservableObject {
             let size = (try? FileManager.default.attributesOfItem(atPath: src.path)[.size] as? NSNumber)?.int64Value ?? 0
             set(id) { $0.size = size; $0.state = .analyzing; $0.message = "중복 파일 여부 확인 중..." }
 
-            // 1) 경로: Tailscale 직통이 열려 있으면 그쪽(웹과 동일), 100MB 초과인데 안 열리면 중단
-            let ts = await API.shared.probeTailscale()
-            if !ts && size > Self.hundredMB {
-                set(id) {
-                    $0.state = .failed
-                    $0.message = "파일 크기가 \(size / 1024 / 1024)MB로 100MB를 초과합니다. Tailscale 연결 후 다시 시도해주세요."
-                }
-                return
-            }
-            let server = ts ? AppConfig.shared.tailscaleServer : AppConfig.shared.server
+            let server = AppConfig.shared.server
 
-            // 2) 중복 확인
+            // 1) 중복 확인 (원본 기준)
             let hash = await Task.detached(priority: .userInitiated) { UploadKit.sha256(of: src) }.value
             if let hash, let dup = try? await API.shared.checkHash(hash, server: server), dup.duplicate {
                 duplicateTitle = dup.existing?.title ?? "(제목 없음)"
@@ -174,25 +163,49 @@ final class UploadCenter: NSObject, ObservableObject {
                 return
             }
 
+            // 2) 서버 한 번 업로드 한도(100MB)를 넘으면 음성만 압축한 파일을 올림
+            var upSrc = src
+            var fname = job.filename
+            if size > UploadKit.uploadLimit {
+                set(id) { $0.message = "\(size / 1024 / 1024)MB라 음성만 압축하는 중..." }
+                let small = Self.workDir.appending(path: "\(id.uuidString).m4a")
+                do {
+                    try await UploadKit.shrinkAudio(src, to: small)
+                } catch {
+                    set(id) { $0.state = .failed; $0.message = "압축 실패: \(error.localizedDescription)" }
+                    return
+                }
+                let s2 = UploadKit.fileSize(small)
+                guard s2 <= UploadKit.uploadLimit else {
+                    set(id) { $0.state = .failed; $0.message = "압축해도 \(s2 / 1024 / 1024)MB라 올릴 수 없습니다 (100MB 한도)" }
+                    return
+                }
+                upSrc = small
+                fname = UploadKit.shrunkName(fname)
+                set(id) { $0.size = s2 }
+            }
+
             // 3) 멀티파트 본문 파일 만들기 → 백그라운드 업로드
             do {
                 let body = Self.workDir.appending(path: "\(id.uuidString).body")
                 let boundary = "malgeul-\(UUID().uuidString)"
-                let fname = job.filename
+                let srcFile = upSrc
+                let nameF = fname
                 // 녹음 시각·자동 받아쓰기는 서버가 업로드와 함께 처리 (앱이 꺼져 있어도 됨)
                 var fields: [String: String] = [:]
                 if let at = job.recordedAt { fields["recorded_at"] = DateParse.isoString(at) }
                 if job.autoTranscribe { fields["auto_transcribe"] = "1" }
                 let f = fields
                 try await Task.detached(priority: .userInitiated) {
-                    try UploadKit.writeMultipart(source: src, filename: fname, fields: f, boundary: boundary, to: body)
+                    try UploadKit.writeMultipart(source: srcFile, filename: nameF, fields: f, boundary: boundary, to: body)
                 }.value
                 var req = try API.shared.request("meetings/upload", method: "POST", server: server)
                 req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
                 req.timeoutInterval = 600
                 let task = session.uploadTask(with: req, fromFile: body)
                 task.taskDescription = id.uuidString
-                set(id) { $0.state = .uploading; $0.viaTailscale = ts; $0.message = nil; $0.progress = 0 }
+                try? FileManager.default.removeItem(at: Self.workDir.appending(path: "\(id.uuidString).m4a"))
+                set(id) { $0.state = .uploading; $0.message = nil; $0.progress = 0 }
                 task.resume()
             } catch {
                 set(id) { $0.state = .failed; $0.message = "업로드 실패: \(error.localizedDescription)" }

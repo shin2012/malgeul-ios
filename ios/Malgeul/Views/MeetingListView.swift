@@ -30,7 +30,6 @@ struct MeetingListView: View {
     @EnvironmentObject private var router: Router
     @EnvironmentObject private var uploads: UploadCenter
     @EnvironmentObject private var device: OnDeviceJobCenter
-    @EnvironmentObject private var recorder: Recorder
     @Environment(\.horizontalSizeClass) private var hsize
 
     @State private var search = ""
@@ -167,7 +166,6 @@ struct MeetingListView: View {
                 .scrollContentBackground(.hidden)
                 .background(Color.mgBg)
                 .safeAreaInset(edge: .bottom) { fab }
-                .safeAreaInset(edge: .top) { recordingBanner }
                 .refreshable { await Task { await store.refresh() }.value }
                 .searchable(text: $search, prompt: "제목·태그 검색")
                 .overlay {
@@ -213,9 +211,11 @@ struct MeetingListView: View {
                 if gi == groups.count - 1 && !filtered.isEmpty {
                     Text("노트 \(filtered.count)개 · 총 \(Fmt.totalDuration(filtered.reduce(0) { $0 + ($1.durationSeconds ?? 0) }))")
                         .font(.system(size: 13)).monospacedDigit().foregroundStyle(Color.mgFg4)
-                        .frame(maxWidth: .infinity).padding(.top, 20).padding(.bottom, 90)
+                        .frame(maxWidth: .infinity).padding(.top, 20).padding(.bottom, 12)
                 }
             }
+            // 묶음 아래 구분선은 그리지 않음 (맨 아래 요약 밑에 짧은 선이 생기던 문제)
+            .listSectionSeparator(.hidden)
         }
     }
 
@@ -258,13 +258,7 @@ struct MeetingListView: View {
         if config.isConfigured && !selecting {
             HStack(spacing: 10) {
                 Spacer()
-                Button { startRecording() } label: {
-                    Label("녹음", systemImage: "mic.fill")
-                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                        .padding(.leading, 18).padding(.trailing, 22).frame(height: 52)
-                        .background(Color.accentMalgeul, in: Capsule())
-                        .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
-                }
+                RecordFabButton { startRecording() }
                 Button { importing = true } label: {
                     Image(systemName: "square.and.arrow.up").font(.system(size: 18, weight: .medium)).foregroundStyle(Color.mgFg2)
                         .frame(width: 52, height: 52)
@@ -277,25 +271,6 @@ struct MeetingListView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
-        }
-    }
-
-    @ViewBuilder private var recordingBanner: some View {
-        if recorder.isActive {
-            Button { router.tab = .record } label: {
-                HStack(spacing: 8) {
-                    Circle().fill(Color.mgDanger).frame(width: 8, height: 8)
-                    Text("녹음 중 · \(Fmt.clock(recorder.elapsed))").monospacedDigit()
-                    Spacer()
-                    Text("열기").fontWeight(.semibold)
-                }
-                .font(.system(size: 14)).foregroundStyle(Color.mgFg)
-                .padding(.horizontal, 14).frame(height: 40)
-                .background(Color(hex: 0xFEEFEF), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16).padding(.vertical, 6)
-            .background(Color.white)
         }
     }
 
@@ -651,11 +626,6 @@ struct UploadJobRow: View {
                     .foregroundStyle(job.state == .failed ? Color.red : Color.accentMalgeul)
                 Text(job.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer()
-                if job.viaTailscale {
-                    Label("Tailscale", systemImage: "point.3.connected.trianglepath.dotted")
-                        .labelStyle(.iconOnly).foregroundStyle(.secondary)
-                        .accessibilityLabel("Tailscale 직통")
-                }
                 if job.state == .uploading {
                     Text("\(Int(job.progress * 100))%").font(.subheadline.weight(.bold)).monospacedDigit().foregroundStyle(.accentMalgeul)
                 }
@@ -750,6 +720,42 @@ enum ListFilter: Equatable {
         case .all: return "전체 노트"
         case .pending: return "처리 전·중"
         case .tag(let t): return "#\(t)"
+        }
+    }
+}
+
+
+/// 목록 오른쪽 아래 녹음 버튼. 녹음 중이면 같은 자리에 진행 상태를 보여 줌
+/// (녹음기 시간 갱신이 목록 전체를 다시 그리지 않도록 따로 둠)
+private struct RecordFabButton: View {
+    @EnvironmentObject private var recorder: Recorder
+    @EnvironmentObject private var router: Router
+    let onStart: () -> Void
+
+    var body: some View {
+        if recorder.isActive {
+            // 녹음 중이면 같은 자리에 진행 상태 (누르면 녹음 화면)
+            Button { router.tab = .record } label: {
+                HStack(spacing: 8) {
+                    Circle().fill(Color.white).frame(width: 8, height: 8)
+                        .opacity(recorder.state == .recording ? 1 : 0.5)
+                    Text(recorder.state == .recording ? "녹음 중" : "일시정지")
+                    Text(Fmt.clock(recorder.elapsed)).monospacedDigit()
+                }
+                .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                .padding(.horizontal, 20).frame(height: 52)
+                .background(recorder.state == .recording ? Color.mgDanger : Color.orange, in: Capsule())
+                .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+            }
+            .accessibilityLabel("녹음 화면 열기")
+        } else {
+            Button { onStart() } label: {
+                Label("녹음", systemImage: "mic.fill")
+                    .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                    .padding(.leading, 18).padding(.trailing, 22).frame(height: 52)
+                    .background(Color.accentMalgeul, in: Capsule())
+                    .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+            }
         }
     }
 }

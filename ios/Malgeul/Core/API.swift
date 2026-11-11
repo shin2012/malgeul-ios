@@ -287,16 +287,6 @@ final class API {
         return (try? JSONDecoder().decode(ExchangeRate.self, from: d))?.rate
     }
 
-    /// Tailscale 직통 주소(ts.meetings…)가 열리는지 — 100MB 넘는 파일은 이 경로로만 올릴 수 있음
-    func probeTailscale() async -> Bool {
-        let ts = config.tailscaleServer.trimmingCharacters(in: .whitespaces)
-        guard ts.hasPrefix("http"), let u = URL(string: ts + "/health") else { return false }
-        var r = URLRequest(url: u)
-        r.timeoutInterval = 4
-        guard let (_, resp) = try? await session.data(for: r), let h = resp as? HTTPURLResponse else { return false }
-        return (200..<300).contains(h.statusCode)
-    }
-
     // MARK: 오디오 (구간 재생용, 한 번 받아 두고 재사용)
 
     func audioFile(_ id: Int) async throws -> URL {

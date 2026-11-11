@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import AVFoundation
 
 /// 앱과 공유 확장이 함께 쓰는 키체인 (공유 키체인 그룹 — App Group 없이 자동 서명 가능)
 enum Keychain {
@@ -57,7 +58,6 @@ enum Keychain {
 /// 서버 연결 정보 (앱 설정에서 저장, 공유 확장이 읽음)
 enum SharedSettings {
     static var server: String { Keychain.get("server") ?? "" }
-    static var tailscale: String { Keychain.get("tailscale") ?? "" }
     static var token: String { (Keychain.get("appToken") ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
     static var isConfigured: Bool { !token.isEmpty && server.hasPrefix("http") && URL(string: server) != nil }
 
@@ -166,9 +166,7 @@ enum DeviceQueue {
 
 /// 업로드 공용 도구: 해시·멀티파트 본문·경로 선택
 enum UploadKit {
-    static let hundredMB: Int64 = 100 * 1024 * 1024
-
-    static func fileSize(_ url: URL) -> Int64 {
+        static func fileSize(_ url: URL) -> Int64 {
         (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
     }
 
@@ -215,13 +213,50 @@ enum UploadKit {
         }
     }
 
-    /// Tailscale 직통 주소가 열려 있는지 (4초)
-    static func probe(_ base: String) async -> Bool {
-        let b = base.trimmingCharacters(in: .whitespaces)
-        guard b.hasPrefix("http"), let u = URL(string: b + "/health") else { return false }
-        var r = URLRequest(url: u)
-        r.timeoutInterval = 4
-        guard let (_, resp) = try? await URLSession.shared.data(for: r), let h = resp as? HTTPURLResponse else { return false }
-        return (200..<300).contains(h.statusCode)
+    /// 서버 앞단(Cloudflare)이 받는 한 번 업로드 한도 100MB보다 조금 작게
+    static let uploadLimit: Int64 = 95 * 1024 * 1024
+
+    /// 한도를 넘는 파일은 음성만 뽑아 AAC 모노 24kHz 32kbps(1시간 약 14MB)로 줄임.
+    /// 받아쓰기엔 충분한 음질 (서버도 어차피 16kHz로 다시 압축함). 줄인 파일 이름은 .m4a
+    static func shrinkAudio(_ src: URL, to out: URL) async throws {
+        let asset = AVURLAsset(url: src)
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
+            throw NSError(domain: "malgeul", code: 2, userInfo: [NSLocalizedDescriptionKey: "파일에서 소리를 찾지 못했습니다"])
+        }
+        try? FileManager.default.removeItem(at: out)
+        try await Task.detached(priority: .userInitiated) {
+            let reader = try AVAssetReader(asset: asset)
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 24_000, AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false,
+            ])
+            output.alwaysCopiesSampleData = false
+            reader.add(output)
+            let writer = try AVAssetWriter(outputURL: out, fileType: .m4a)
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 24_000, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 32_000,
+            ])
+            input.expectsMediaDataInRealTime = false
+            writer.add(input)
+            guard reader.startReading() else { throw reader.error ?? NSError(domain: "malgeul", code: 3) }
+            guard writer.startWriting() else { throw writer.error ?? NSError(domain: "malgeul", code: 4) }
+            var started = false
+            while true {
+                guard input.isReadyForMoreMediaData else { Thread.sleep(forTimeInterval: 0.005); continue }
+                guard let buf = output.copyNextSampleBuffer() else { break }
+                if !started { writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(buf)); started = true }
+                if !input.append(buf) { reader.cancelReading(); throw writer.error ?? NSError(domain: "malgeul", code: 5) }
+            }
+            if reader.status == .failed { throw reader.error ?? NSError(domain: "malgeul", code: 6) }
+            input.markAsFinished()
+            await writer.finishWriting()
+            if writer.status != .completed { throw writer.error ?? NSError(domain: "malgeul", code: 7) }
+        }.value
+    }
+
+    /// 줄인 파일 이름: 확장자만 .m4a로
+    static func shrunkName(_ name: String) -> String {
+        ((name as NSString).deletingPathExtension) + ".m4a"
     }
 }

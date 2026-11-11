@@ -148,13 +148,41 @@ struct LiveLockScreenView: View {
     }
 }
 
-/// 다이내믹 아일랜드 펼친 모양 (바탕은 항상 검정)
-struct LiveIslandExpandedBottom: View {
+/// 다이내믹 아일랜드 펼친 모양 왼쪽: 상태 아이콘 + 말글 · 상태 (바탕은 항상 검정)
+struct LiveIslandLeading: View {
     let shown: LiveShown
     var body: some View {
-        HStack {
-            Text(shown.label).font(.footnote).foregroundStyle(Color(white: 0.75)).lineLimit(1)
-            Spacer()
+        let c = shown.color(.dark)
+        HStack(spacing: 10) {
+            ZStack {
+                Circle().fill(c.opacity(0.25))
+                Image(systemName: shown.symbol).foregroundStyle(c).font(.system(size: 15, weight: .semibold))
+            }
+            .frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("말글").font(.caption).foregroundStyle(Color(white: 0.6))
+                Text(shown.shortLabel).font(.subheadline.weight(.semibold)).foregroundStyle(c).lineLimit(1)
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .leading)
+    }
+}
+
+/// 다이내믹 아일랜드 펼친 모양 아래: 녹음 제목·안내 + 일시정지/계속 버튼
+struct LiveIslandExpandedBottom: View {
+    let shown: LiveShown
+    var title: String = ""
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                if !title.isEmpty {
+                    Text(title).font(.footnote).foregroundStyle(Color(white: 0.85)).lineLimit(1)
+                }
+                if !shown.canToggle {
+                    Text(shown.label).font(.caption).foregroundStyle(Color(white: 0.6)).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
             if shown.canToggle { LiveToggleButton(shown: shown, scheme: .dark) }
         }
     }

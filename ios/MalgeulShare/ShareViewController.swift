@@ -135,19 +135,11 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
         phase = .sending
         results = []
         Task {
-            let server = SharedSettings.server
-            let ts = SharedSettings.tailscale
-            status = "연결 확인 중..."
-            let viaTS = await UploadKit.probe(ts)
-            let base = viaTS ? ts : server
+            let base = SharedSettings.server
             for (i, f) in files.enumerated() {
                 let label = files.count > 1 ? "(\(i + 1)/\(files.count)) " : ""
                 do {
                     let name = uploadName(f)
-                    if !viaTS && f.size > UploadKit.hundredMB {
-                        results.append("⚠️ \(name): \(f.size / 1024 / 1024)MB로 100MB를 초과합니다. Tailscale 연결 후 다시 시도해주세요.")
-                        continue
-                    }
                     status = "\(label)중복 파일 여부 확인 중..."
                     progress = 0
                     if let dup = try await checkDuplicate(f.url, base: base) {
@@ -155,7 +147,24 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
                         continue
                     }
                     status = "\(label)올리는 중..."
-                    let t = try await upload(f, name: name, base: base)
+                    // 100MB 한도를 넘으면 음성만 압축해서 올림
+                    var up = f.url
+                    var upName = name
+                    var small: URL?
+                    if f.size > UploadKit.uploadLimit {
+                        status = "\(label)\(f.size / 1024 / 1024)MB라 음성만 압축하는 중..."
+                        let s = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).m4a")
+                        try await UploadKit.shrinkAudio(f.url, to: s)
+                        guard UploadKit.fileSize(s) <= UploadKit.uploadLimit else {
+                            try? FileManager.default.removeItem(at: s)
+                            results.append("⚠️ \(name): 압축해도 100MB를 넘어 올릴 수 없습니다")
+                            continue
+                        }
+                        small = s; up = s; upName = UploadKit.shrunkName(name)
+                        status = "\(label)올리는 중..."
+                    }
+                    defer { if let small { try? FileManager.default.removeItem(at: small) } }
+                    let t = try await upload(f, from: up, name: upName, base: base)
                     results.append("✓ \(t)")
                 } catch {
                     results.append("⚠️ \(f.originalName): \(error.localizedDescription)")
@@ -198,13 +207,13 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
         return ((o?["existing"] as? [String: Any])?["title"] as? String) ?? "(제목 없음)"
     }
 
-    private func upload(_ f: SharedFile, name: String, base: String) async throws -> String {
+    private func upload(_ f: SharedFile, from source: URL, name: String, base: String) async throws -> String {
         let body = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).body")
         defer { try? FileManager.default.removeItem(at: body) }
         let boundary = "malgeul-\(UUID().uuidString)"
         // 받아쓰기 방식이 '이 기기'면 서버 자동 받아쓰기 대신 대기 목록에 넣고 앱이 열릴 때 처리
         let fields = autoTranscribe && !deviceMode ? ["auto_transcribe": "1"] : [:]
-        let src = f.url
+        let src = source
         try await Task.detached(priority: .userInitiated) {
             try UploadKit.writeMultipart(source: src, filename: name, fields: fields, boundary: boundary, to: body)
         }.value
@@ -289,7 +298,7 @@ struct ShareView: View {
                     if !model.inboxAvailable {
                         Text("앱 그룹이 아직 준비되지 않아 바로 올리기만 할 수 있어요.")
                     } else if model.action == .upload {
-                        Text("다 보낼 때까지 이 화면을 열어 두세요. 큰 파일은 Tailscale에 연결되어 있을 때만 올릴 수 있어요(100MB 초과).")
+                        Text("다 보낼 때까지 이 화면을 열어 두세요. 100MB가 넘는 파일은 음성만 압축해서 올려요.")
                     } else {
                         Text("서버로 올리지 않고 말글 앱으로 복사만 합니다. 기본값은 말글 앱 설정 > 처리 방식에서 바꿀 수 있어요.")
                     }

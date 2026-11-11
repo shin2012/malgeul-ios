@@ -24,7 +24,7 @@ enum DebugRoute {
 
     static func apply() {
         let d = UserDefaults.standard
-        if let s = d.string(forKey: "demoServer") { AppConfig.shared.server = s; AppConfig.shared.tailscaleServer = "" }
+        if let s = d.string(forKey: "demoServer") { AppConfig.shared.server = s }
         if let t = d.string(forKey: "demoToken") { AppConfig.shared.token = t }
         let r = Router.shared
         switch d.string(forKey: "screen") ?? "" {

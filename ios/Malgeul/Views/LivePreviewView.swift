@@ -29,24 +29,28 @@ struct LivePreviewView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     Text(scheme == .dark ? "다크 모드" : "주간 모드").font(.headline).foregroundStyle(.white)
+                    // 다이내믹 아일랜드 펼침 (실제 여백 16 + 칸 여백과 같게)
+                    ForEach([LiveShown.recording(.now - 754, 754), .paused(1830), .unknown], id: \.shortLabel) { sh in
+                        VStack(spacing: 0) {
+                            HStack(alignment: .top) {
+                                LiveIslandLeading(shown: sh).padding(.leading, 6).padding(.top, 6).frame(height: 48)
+                                Spacer()
+                                LiveTimeText(shown: sh).font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
+                                    .frame(maxWidth: 110, alignment: .trailing).padding(.trailing, 6).padding(.top, 6)
+                            }
+                            LiveIslandExpandedBottom(shown: sh, title: "11월 11일 14:05 시작")
+                                .padding(.horizontal, 6).padding(.top, 10).padding(.bottom, 4)
+                        }
+                        .padding(16)
+                        .background(RoundedRectangle(cornerRadius: 44, style: .continuous).fill(.black))
+                    }
+                    .environment(\.colorScheme, .dark)
                     ForEach(samples, id: \.0) { s in
                         LiveLockScreenView(state: s.1, title: "11월 11일 14:05 시작", stale: s.2)
                             .background(.ultraThinMaterial)
                             .background(LiveLockScreenView.background(scheme))
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     }
-                    // 다이내믹 아일랜드 펼침 · 좁은 모양
-                    VStack(spacing: 8) {
-                        HStack {
-                            Label("말글", systemImage: "mic.fill").foregroundStyle(LiveColors.rec).font(.subheadline.weight(.semibold))
-                            Spacer()
-                            LiveTimeText(shown: .recording(.now - 754, 754)).font(.title3.weight(.semibold)).foregroundStyle(.white)
-                        }
-                        LiveIslandExpandedBottom(shown: .recording(.now - 754, 754))
-                    }
-                    .padding(16)
-                    .background(Capsule(style: .continuous).fill(.black))
-                    .environment(\.colorScheme, .dark)
                     HStack(spacing: 40) {
                         Image(systemName: "mic.fill").foregroundStyle(LiveColors.rec)
                         LiveTimeText(shown: .recording(.now - 754, 754)).foregroundStyle(LiveColors.rec).frame(maxWidth: 52)

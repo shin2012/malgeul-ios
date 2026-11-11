@@ -29,15 +29,20 @@ struct RecordingLiveActivity: Widget {
             let shown = LiveShown(context.state, stale: context.isStale)
             let c = shown.color(.dark)
             return DynamicIsland {
+                // 펼친 모양: 왼쪽 아이콘·상태 / 오른쪽 시간 / 아래 제목·버튼 — 가장자리와 줄 사이 여백을 넉넉히
                 DynamicIslandExpandedRegion(.leading) {
-                    Label("말글", systemImage: shown.symbol).foregroundStyle(c).font(.subheadline.weight(.semibold))
+                    LiveIslandLeading(shown: shown)
+                        .padding(.leading, 6).padding(.top, 6)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    LiveTimeText(shown: shown).font(.title3.weight(.semibold)).foregroundStyle(.white)
-                        .frame(maxWidth: 90, alignment: .trailing)
+                    LiveTimeText(shown: shown).font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                        .frame(maxWidth: 110, maxHeight: .infinity, alignment: .trailing)
+                        .padding(.trailing, 6).padding(.top, 6)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    LiveIslandExpandedBottom(shown: shown)
+                    LiveIslandExpandedBottom(shown: shown, title: context.attributes.title)
+                        .padding(.horizontal, 6).padding(.top, 10).padding(.bottom, 4)
                 }
             } compactLeading: {
                 Image(systemName: shown.symbol).foregroundStyle(c)
@@ -46,6 +51,7 @@ struct RecordingLiveActivity: Widget {
             } minimal: {
                 Image(systemName: shown.symbol).foregroundStyle(c)
             }
+            .contentMargins(.all, 16, for: .expanded)
             .widgetURL(URL(string: "malgeul://record"))
             .keylineTint(c)
         }

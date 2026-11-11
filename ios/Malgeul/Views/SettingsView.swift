@@ -9,7 +9,6 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 ServerSection()
-                TailscaleSection()
 
                 Section("녹음") {
                     Toggle("녹음 업로드 후 바로 받아쓰기", isOn: $config.autoTranscribeRecordings)
@@ -181,42 +180,5 @@ private struct ServerSection: View {
             editing = false
             await store.refresh()
         }
-    }
-}
-
-/// Tailscale 직통 주소: 주소 칸 옆에 상태 점(누르면 다시 확인)
-private struct TailscaleSection: View {
-    @EnvironmentObject private var config: AppConfig
-    @State private var address = ""
-    @State private var kind: StatusDot.Kind = .none
-
-    var body: some View {
-        Section {
-            HStack(spacing: 6) {
-                TextField("Tailscale 직통 주소 (선택)", text: $address)
-                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .onSubmit { Task { await probe() } }
-                Button { Task { await probe() } } label: {
-                    StatusDot(kind: kind).padding(8).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("다시 확인")
-            }
-        } header: {
-            Text("Tailscale")
-        } footer: {
-            Text("점을 누르면 다시 확인합니다. 연결되어 있으면 업로드는 직통 주소로 가고, 100MB가 넘는 파일은 이때만 올릴 수 있어요.")
-        }
-        .task {
-            address = config.tailscaleServer
-            await probe()
-        }
-    }
-
-    private func probe() async {
-        config.tailscaleServer = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !config.tailscaleServer.isEmpty else { kind = .none; return }
-        kind = .checking
-        kind = await API.shared.probeTailscale() ? .ok : .fail
     }
 }
