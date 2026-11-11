@@ -60,9 +60,14 @@ final class UploadCenter: NSObject, ObservableObject {
 
     private override init() {
         super.init()
+        #if targetEnvironment(simulator)
+        // 서명 없는 시뮬레이터 빌드(CI)는 백그라운드 세션이 NSURLErrorUnknown(-1)로 실패 → 일반 세션으로 같은 흐름을 시험
+        let c = URLSessionConfiguration.default
+        #else
         let c = URLSessionConfiguration.background(withIdentifier: Self.sessionID)
         c.isDiscretionary = false
         c.sessionSendsLaunchEvents = true
+        #endif
         c.timeoutIntervalForRequest = 600
         session = URLSession(configuration: c, delegate: self, delegateQueue: nil)
         if let d = try? Data(contentsOf: Self.jobsFile), let j = try? JSONDecoder().decode([UploadJob].self, from: d) {
