@@ -244,7 +244,7 @@ final class UploadCenter: NSObject, ObservableObject {
             set(id) { $0.chunkIndex = i; $0.state = .uploading }
             task.resume()
         } catch {
-            set(id) { $0.state = .failed; $0.message = "업로드 실패: \(error.localizedDescription)" }
+            set(id) { $0.state = .failed; $0.message = "조각 준비 실패: \(self.describe(error))" }
         }
     }
 
@@ -266,13 +266,19 @@ final class UploadCenter: NSObject, ObservableObject {
         }
     }
 
+    private func describe(_ e: Error) -> String {
+        let ns = e as NSError
+        return "\(e.localizedDescription) (\(ns.domain) \(ns.code))"
+    }
+
     /// 조각 하나가 끝남
     private func chunkDone(_ id: UUID, _ i: Int, status: Int, data: Data, error: Error?) {
         try? FileManager.default.removeItem(at: partURL(id, i))
         guard let job = jobs.first(where: { $0.id == id }) else { return }
         if let error {
             if error.isCancellation { return }
-            set(id) { $0.state = .failed; $0.message = "업로드 실패: \(error.localizedDescription) · 다시 시도하면 이어서 올립니다" }
+            NSLog("[upload] 조각 %d 실패: %@", i, describe(error))
+            set(id) { $0.state = .failed; $0.message = "업로드 실패: \(self.describe(error)) · 다시 시도하면 이어서 올립니다" }
             return
         }
         guard (200..<300).contains(status) else {
