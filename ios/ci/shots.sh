@@ -28,11 +28,11 @@ real_live() {
   sleep 6
   osascript -e 'tell application "Simulator" to activate' -e 'delay 1' \
     -e 'tell application "System Events" to keystroke "l" using command down' || echo "lock keystroke failed"
-  sleep 3
-  osascript -e 'tell application "Simulator" to activate' \
-    -e 'tell application "System Events" to keystroke "h" using {command down, shift down}' || echo "home keystroke failed"
-  sleep 4
+  # 암호 없는 시뮬레이터는 홈 버튼을 누르면 바로 잠금이 풀리므로 잠근 직후 화면을 찍음
+  sleep 2
   xcrun simctl io "$UDID" screenshot "$OUT/${NAME}-${s}-lock.png" >/dev/null 2>&1 && echo "shot $NAME $s lock"
+  sleep 4
+  xcrun simctl io "$UDID" screenshot "$OUT/${NAME}-${s}-lock2.png" >/dev/null 2>&1 && echo "shot $NAME $s lock2"
   osascript -e 'tell application "Simulator" to quit' || true
   sleep 2
 }
