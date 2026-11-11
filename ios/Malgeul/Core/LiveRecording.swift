@@ -19,14 +19,14 @@ final class LiveRecording {
     /// 앱 시작 때: 지난번(앱 강제 종료 등)에 남은 표시 정리
     func cleanUpLeftovers(recording: Bool) {
         guard !recording else { return }
-        for a in Activity<RecordingActivityAttributes>.activities {
+        for a in Activity<RecordingActivityAttributes>.activities where a.id != activity?.id {
             Task { await a.end(nil, dismissalPolicy: .immediate) }
         }
-        activity = nil
     }
 
     func start(title: String, startedAt: Date) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        activity = nil
         cleanUpLeftovers(recording: false)
         let state = content(.recording, elapsed: 0)
         do {

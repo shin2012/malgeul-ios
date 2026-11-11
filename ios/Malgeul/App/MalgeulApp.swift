@@ -19,6 +19,9 @@ final class Router: ObservableObject {
 /// CI 스크린샷용: -demoServer URL -demoToken T -screen 이름
 @MainActor
 enum DebugRoute {
+    /// -screen live / livedark: 잠금 화면 표시 점검 화면
+    static var livePreview: ColorScheme?
+
     static func apply() {
         let d = UserDefaults.standard
         if let s = d.string(forKey: "demoServer") { AppConfig.shared.server = s; AppConfig.shared.tailscaleServer = "" }
@@ -30,6 +33,11 @@ enum DebugRoute {
         case "doc": r.meetingID = 5; r.debugOpenDoc = true
         case "record": r.tab = .record
         case "settings": r.tab = .settings
+        case "live": livePreview = .light
+        case "livedark": livePreview = .dark
+        case "real", "realdark":
+            // 실제 라이브 액티비티를 띄움 (녹음은 하지 않음)
+            LiveRecording.shared.start(title: "11월 11일 14:05 시작", startedAt: .now - 754)
         default: break
         }
     }
@@ -98,6 +106,13 @@ struct MalgeulApp: App {
                 .tint(.accentMalgeul)
                 .preferredColorScheme(.light)
                 .onOpenURL(perform: handle)
+                #if DEBUG
+                .overlay {
+                    if let sc = DebugRoute.livePreview {
+                        LivePreviewView().environment(\.colorScheme, sc)
+                    }
+                }
+                #endif
         }
     }
 
