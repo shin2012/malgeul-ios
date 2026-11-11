@@ -37,7 +37,7 @@ enum DebugRoute {
         case "livedark": livePreview = .dark
         case "real", "realdark":
             // 실제 라이브 액티비티를 띄움 (녹음은 하지 않음)
-            LiveRecording.shared.start(title: "11월 11일 14:05 시작", startedAt: .now - 754)
+            LiveRecording.shared.start(title: "11월 11일 14:05 시작", startedAt: .now - 754, elapsed: 754)
         default: break
         }
     }

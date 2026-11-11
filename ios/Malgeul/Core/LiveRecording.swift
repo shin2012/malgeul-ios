@@ -24,11 +24,11 @@ final class LiveRecording {
         }
     }
 
-    func start(title: String, startedAt: Date) {
+    func start(title: String, startedAt: Date, elapsed: TimeInterval = 0) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         activity = nil
         cleanUpLeftovers(recording: false)
-        let state = content(.recording, elapsed: 0)
+        let state = content(.recording, elapsed: elapsed)
         do {
             activity = try Activity.request(attributes: .init(title: title, startedAt: startedAt),
                                             content: .init(state: state, staleDate: .now + Self.staleAfter))

@@ -15,11 +15,11 @@ enum LiveColors {
 
 /// 화면에 보일 상태 (앱이 한동안 확인을 못 하면 '확인 안 됨')
 enum LiveShown {
-    case recording(Date), paused(TimeInterval), interrupted(TimeInterval), stopped(TimeInterval), unknown
+    case recording(Date, TimeInterval), paused(TimeInterval), interrupted(TimeInterval), stopped(TimeInterval), unknown
 
     init(_ s: RecordingActivityAttributes.ContentState, stale: Bool) {
         switch s.phase {
-        case .recording: self = stale ? .unknown : .recording(s.timerStart)
+        case .recording: self = stale ? .unknown : .recording(s.timerStart, s.elapsed)
         case .paused: self = .paused(s.elapsed)
         case .interrupted: self = .interrupted(s.elapsed)
         case .stopped: self = .stopped(s.elapsed)
@@ -75,10 +75,17 @@ enum LiveShown {
 
 struct LiveTimeText: View {
     let shown: LiveShown
+    /// 잠금 화면이 어두워진 상태(상시 표시)에선 초 단위 타이머 대신 앱이 마지막으로 알려 준 분을 보여 줌
+    @Environment(\.isLuminanceReduced) private var dimmed
     var body: some View {
         switch shown {
-        case .recording(let start):
-            Text(start, style: .timer).monospacedDigit()
+        case .recording(let start, let elapsed):
+            if dimmed {
+                Text(elapsed < 60 ? "1분 미만" : "\(Int(elapsed / 60))분째")
+            } else {
+                Text(timerInterval: start...start.addingTimeInterval(24 * 3600), countsDown: false)
+                    .monospacedDigit()
+            }
         case .paused(let t), .interrupted(let t), .stopped(let t):
             Text(LiveFormat.duration(t)).monospacedDigit()
         case .unknown:
