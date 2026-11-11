@@ -42,7 +42,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in _ = UploadCenter.shared }
         // 애플워치 녹음 받기 (앱이 꺼져 있으면 시스템이 백그라운드로 깨워 전달)
         WatchLink.shared.activate()
+        // 잠금 화면 녹음 표시: 버튼 연결 + 지난번에 남은 표시 정리
+        MainActor.assumeIsolated {
+            LiveRecordingActions.handler = { cmd in
+                switch cmd {
+                case .togglePause: Recorder.shared.togglePause()
+                }
+            }
+            LiveRecording.shared.cleanUpLeftovers(recording: Recorder.shared.isActive)
+        }
         return true
+    }
+
+    func applicationWillTerminate(_ application: UIApplication) {
+        MainActor.assumeIsolated { Recorder.shared.appWillTerminate() }
     }
 
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
@@ -98,6 +111,11 @@ struct MalgeulApp: App {
         if config.handleSetupURL(url) {
             router.tab = .meetings
             Task { await store.refresh() }
+            return
+        }
+        // malgeul://record (잠금 화면 녹음 표시를 누름)
+        if url.scheme == "malgeul", url.host == "record" {
+            router.tab = .record
             return
         }
         // malgeul://meeting/123

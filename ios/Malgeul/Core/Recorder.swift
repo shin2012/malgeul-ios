@@ -200,6 +200,10 @@ final class Recorder: NSObject, ObservableObject {
             levels = Array(repeating: 0, count: levels.count)
             state = .recording
             startTimer()
+            let tf = DateFormatter()
+            tf.locale = Locale(identifier: "ko_KR")
+            tf.dateFormat = "M월 d일 HH:mm 시작"
+            LiveRecording.shared.start(title: tf.string(from: startedAt), startedAt: startedAt)
         } catch {
             lastError = error.localizedDescription
             try? AVAudioSession.sharedInstance().setActive(false)
@@ -210,12 +214,39 @@ final class Recorder: NSObject, ObservableObject {
         guard state == .recording else { return }
         recorder?.pause()
         state = .paused
+        LiveRecording.shared.update(.paused, elapsed: currentElapsed)
+    }
+
+    /// 잠금 화면 버튼: 일시정지 ↔ 계속
+    func togglePause() {
+        switch state {
+        case .recording: pause()
+        case .paused: resume()
+        case .idle: break
+        }
+    }
+
+    private var currentElapsed: TimeInterval {
+        if let r = recorder, r.currentTime > 0 { return r.currentTime }
+        return elapsed
+    }
+
+    /// 앱이 꺼지는 중 (강제 종료 등) — 파일을 마무리하고 잠금 화면에 '멈춤' 표시
+    func appWillTerminate() {
+        guard let r = recorder else { return }
+        let t = currentElapsed
+        r.stop()
+        LiveRecording.shared.endAsStopped(elapsed: t)
     }
 
     func resume() {
         guard state == .paused, let r = recorder else { return }
         try? AVAudioSession.sharedInstance().setActive(true)
-        if r.record() { state = .recording; interrupted = false }
+        if r.record() {
+            state = .recording
+            interrupted = false
+            LiveRecording.shared.update(.recording, elapsed: currentElapsed)
+        }
     }
 
     /// 녹음 끝내기 → 녹음 목록에 추가하고 완료 시트에 넘김
@@ -228,6 +259,7 @@ final class Recorder: NSObject, ObservableObject {
         timer = nil
         state = .idle
         interrupted = false
+        LiveRecording.shared.end()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         let f = DateFormatter()
         f.locale = Locale(identifier: "ko_KR")
@@ -246,6 +278,8 @@ final class Recorder: NSObject, ObservableObject {
         timer?.invalidate()
         timer = nil
         state = .idle
+        interrupted = false
+        LiveRecording.shared.end()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
@@ -261,6 +295,12 @@ final class Recorder: NSObject, ObservableObject {
     private func tick() {
         guard let r = recorder else { return }
         elapsed = r.currentTime > 0 ? r.currentTime : elapsed
+        // 잠금 화면 표시: 실제로 녹음이 이어지는지 확인해 주기적으로 갱신
+        switch state {
+        case .recording: LiveRecording.shared.update(r.isRecording ? .recording : .stopped, elapsed: elapsed)
+        case .paused: LiveRecording.shared.update(interrupted ? .interrupted : .paused, elapsed: elapsed)
+        case .idle: break
+        }
         guard state == .recording else { return }
         r.updateMeters()
         let db = r.averagePower(forChannel: 0)            // -160 ~ 0
@@ -276,7 +316,11 @@ final class Recorder: NSObject, ObservableObject {
         Task { @MainActor in
             switch type {
             case .began:
-                if self.state == .recording { self.state = .paused; self.interrupted = true }
+                if self.state == .recording {
+                    self.state = .paused
+                    self.interrupted = true
+                    LiveRecording.shared.update(.interrupted, elapsed: self.currentElapsed)
+                }
             case .ended:
                 if self.interrupted && opts.contains(.shouldResume) { self.resume() }
             @unknown default: break

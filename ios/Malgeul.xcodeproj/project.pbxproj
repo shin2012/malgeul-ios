@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1A0000000000000000000030 /* MalgeulShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000020 /* MalgeulShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1A0000000000000000000069 /* MalgeulWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000060 /* MalgeulWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1A0000000000000000000079 /* MalgeulWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000070 /* MalgeulWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1A0000000000000000000051 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000052 /* FluidAudio */; };
 /* End PBXBuildFile section */
 
@@ -16,6 +17,8 @@
 		1A0000000000000000000001 /* Malgeul.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Malgeul.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000020 /* MalgeulShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MalgeulShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000060 /* MalgeulWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MalgeulWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A0000000000000000000070 /* MalgeulWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MalgeulWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A000000000000000000007D /* Widget-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Widget-Info.plist"; sourceTree = "<group>"; };
 		1A000000000000000000006D /* Watch-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Watch-Info.plist"; sourceTree = "<group>"; };
 		1A000000000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		1A000000000000000000000C /* Share-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Share-Info.plist"; sourceTree = "<group>"; };
@@ -28,6 +31,8 @@
 		1A0000000000000000000021 /* MalgeulShare */ = {isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulShare; sourceTree = "<group>"; };
 		1A0000000000000000000061 /* MalgeulWatch */ = {isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulWatch; sourceTree = "<group>"; };
 		1A0000000000000000000040 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; };
+		1A0000000000000000000071 /* MalgeulWidget */ = {isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulWidget; sourceTree = "<group>"; };
+		1A000000000000000000007E /* LiveActivity */ = {isa = PBXFileSystemSynchronizedRootGroup; path = LiveActivity; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -38,6 +43,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				1A0000000000000000000030 /* MalgeulShare.appex in Embed Foundation Extensions */,
+				1A0000000000000000000079 /* MalgeulWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -70,6 +76,13 @@
 			remoteGlobalIDString = 1A0000000000000000000065;
 			remoteInfo = MalgeulWatch;
 		};
+		1A000000000000000000007B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A0000000000000000000009 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1A0000000000000000000075;
+			remoteInfo = MalgeulWidget;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
@@ -82,6 +95,11 @@
 			isa = PBXTargetDependency;
 			target = 1A0000000000000000000065 /* MalgeulWatch */;
 			targetProxy = 1A000000000000000000006B /* PBXContainerItemProxy */;
+		};
+		1A000000000000000000007C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1A0000000000000000000075 /* MalgeulWidget */;
+			targetProxy = 1A000000000000000000007B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -108,6 +126,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1A0000000000000000000073 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -118,6 +143,8 @@
 				1A0000000000000000000021 /* MalgeulShare */,
 				1A0000000000000000000061 /* MalgeulWatch */,
 				1A0000000000000000000040 /* Shared */,
+				1A0000000000000000000071 /* MalgeulWidget */,
+				1A000000000000000000007E /* LiveActivity */,
 				1A000000000000000000000A /* Config */,
 				1A0000000000000000000005 /* Products */,
 			);
@@ -131,6 +158,7 @@
 				1A000000000000000000000D /* Malgeul.entitlements */,
 				1A000000000000000000000E /* Share.entitlements */,
 				1A000000000000000000006D /* Watch-Info.plist */,
+				1A000000000000000000007D /* Widget-Info.plist */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -141,6 +169,7 @@
 				1A0000000000000000000001 /* Malgeul.app */,
 				1A0000000000000000000020 /* MalgeulShare.appex */,
 				1A0000000000000000000060 /* MalgeulWatch.app */,
+				1A0000000000000000000070 /* MalgeulWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -163,10 +192,12 @@
 			dependencies = (
 				1A0000000000000000000033 /* PBXTargetDependency */,
 				1A000000000000000000006C /* PBXTargetDependency */,
+				1A000000000000000000007C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				1A0000000000000000000002 /* Malgeul */,
 				1A0000000000000000000040 /* Shared */,
+				1A000000000000000000007E /* LiveActivity */,
 			);
 			name = Malgeul;
 			packageProductDependencies = (
@@ -221,6 +252,29 @@
 			productReference = 1A0000000000000000000060 /* MalgeulWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
+		1A0000000000000000000075 /* MalgeulWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A0000000000000000000078 /* Build configuration list for PBXNativeTarget "MalgeulWidget" */;
+			buildPhases = (
+				1A0000000000000000000072 /* Sources */,
+				1A0000000000000000000073 /* Frameworks */,
+				1A0000000000000000000074 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1A0000000000000000000071 /* MalgeulWidget */,
+				1A000000000000000000007E /* LiveActivity */,
+			);
+			name = MalgeulWidget;
+			packageProductDependencies = (
+			);
+			productName = MalgeulWidget;
+			productReference = 1A0000000000000000000070 /* MalgeulWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -238,6 +292,9 @@
 						CreatedOnToolsVersion = 16.0;
 					};
 					1A0000000000000000000065 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					1A0000000000000000000075 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -262,6 +319,7 @@
 				1A0000000000000000000006 /* Malgeul */,
 				1A0000000000000000000025 /* MalgeulShare */,
 				1A0000000000000000000065 /* MalgeulWatch */,
+				1A0000000000000000000075 /* MalgeulWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -288,6 +346,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1A0000000000000000000074 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -306,6 +371,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1A0000000000000000000062 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A0000000000000000000072 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -564,6 +636,56 @@
 			};
 			name = Release;
 		};
+		1A0000000000000000000076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "말글";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.6.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "kr.b-612.malgeul.widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1A0000000000000000000077 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "말글";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.6.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "kr.b-612.malgeul.widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -599,6 +721,15 @@
 			buildConfigurations = (
 				1A0000000000000000000066 /* Debug */,
 				1A0000000000000000000067 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1A0000000000000000000078 /* Build configuration list for PBXNativeTarget "MalgeulWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A0000000000000000000076 /* Debug */,
+				1A0000000000000000000077 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
