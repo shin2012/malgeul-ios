@@ -8,7 +8,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                ServerSection()
+                AccountSection()
+                GroupsSection()
 
                 Section("녹음") {
                     Toggle("녹음 업로드 후 바로 받아쓰기", isOn: $config.autoTranscribeRecordings)
@@ -81,104 +82,5 @@ struct StatusDot: View {
         }
         .frame(width: 10, height: 10)
         .accessibilityLabel(kind == .ok ? "연결됨" : kind == .fail ? "연결 안 됨" : kind == .checking ? "확인 중" : "주소 없음")
-    }
-}
-
-/// 서버: 입력돼 있으면 주소·토큰 칸 없이 상태만. 연결 안 되면 '재연결'. '서버 변경'을 누르면 입력 칸
-private struct ServerSection: View {
-    @EnvironmentObject private var config: AppConfig
-    @EnvironmentObject private var store: MeetingStore
-
-    @State private var editing = false
-    @State private var server = ""
-    @State private var token = ""
-    @State private var kind: StatusDot.Kind = .checking
-    @State private var detail: String?
-
-    private var host: String { URL(string: config.server)?.host() ?? config.server }
-
-    var body: some View {
-        Section {
-            if config.isConfigured && !editing {
-                HStack(spacing: 10) {
-                    StatusDot(kind: kind)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(host).lineLimit(1)
-                        if let detail {
-                            Text(detail).font(.caption).foregroundStyle(kind == .fail ? Color.red : Color.secondary).lineLimit(2)
-                        }
-                    }
-                    Spacer()
-                    if kind == .fail {
-                        Button("재연결") { Task { await check() } }
-                            .buttonStyle(.borderedProminent).controlSize(.small)
-                    }
-                }
-                Button("서버 변경") {
-                    server = config.server
-                    token = config.token
-                    editing = true
-                }
-            } else {
-                TextField("서버 주소 (https://…)", text: $server)
-                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                SecureField("앱 토큰", text: $token)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                HStack {
-                    Button {
-                        Task { await saveAndCheck() }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("저장하고 연결")
-                            if kind == .checking && editing { ProgressView() }
-                        }
-                    }
-                    .disabled(server.trimmingCharacters(in: .whitespaces).isEmpty || token.trimmingCharacters(in: .whitespaces).isEmpty)
-                    Spacer()
-                    if editing && config.isConfigured {
-                        Button("취소", role: .cancel) { editing = false; Task { await check() } }
-                            .buttonStyle(.borderless)
-                    }
-                }
-                if let detail, kind == .fail {
-                    Text(detail).font(.caption).foregroundStyle(.red)
-                }
-            }
-        } header: {
-            Text("서버")
-        } footer: {
-            if !config.isConfigured || editing {
-                Text("앱은 서버의 앱 전용 주소(/app/api)를 토큰으로 호출합니다. 토큰은 이 기기의 키체인에만 저장됩니다.")
-            }
-        }
-        .task(id: config.token + config.server) {
-            if config.isConfigured && !editing { await check() }
-        }
-    }
-
-    private func check() async {
-        kind = .checking
-        detail = nil
-        do {
-            let d = try await API.shared.meetingsRaw()
-            let n = (try? JSONDecoder().decode([Meeting].self, from: d))?.count ?? 0
-            kind = .ok
-            detail = "회의 \(n)건"
-        } catch {
-            if error.isCancellation { return }
-            kind = .fail
-            detail = error.localizedDescription
-        }
-    }
-
-    private func saveAndCheck() async {
-        editing = true
-        config.server = server.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        config.token = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        await check()
-        if kind == .ok {
-            editing = false
-            await store.refresh()
-        }
     }
 }

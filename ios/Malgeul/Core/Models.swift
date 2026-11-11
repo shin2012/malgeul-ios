@@ -97,6 +97,7 @@ struct Meeting: Decodable, Identifiable, Hashable {
     var transcribedAt: Date?
     var segmentCount: Int?
     var tags: [String]
+    var groupId: Int?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyKey.self)
@@ -106,6 +107,7 @@ struct Meeting: Decodable, Identifiable, Hashable {
         self.id = id
         title = c.str("title") ?? "(제목 없음)"
         originalFilename = c.str("original_filename")
+        groupId = c.int("group_id")
         durationSeconds = c.int("duration_seconds")
         fileSizeBytes = c.int("file_size_bytes")
         status = c.str("status") ?? "pending"
@@ -230,4 +232,20 @@ struct DuplicateCheck: Decodable {
     struct Existing: Decodable { var id: Int?; var title: String? }
     var duplicate: Bool
     var existing: Existing?
+}
+
+/// 녹음 그룹 (분류 + 화자 추정 단위). 첫 그룹이 기본
+struct MeetingGroup: Decodable, Identifiable, Hashable {
+    let id: Int
+    var name: String
+    var meetingCount: Int
+    var isDefault: Bool
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        id = c.int("id") ?? 0
+        name = c.str("name") ?? "그룹"
+        meetingCount = c.int("meeting_count") ?? 0
+        isDefault = (c.int("is_default") ?? 0) == 1
+    }
 }

@@ -55,10 +55,18 @@ enum Keychain {
     }
 }
 
-/// 서버 연결 정보 (앱 설정에서 저장, 공유 확장이 읽음)
+/// 서버 연결 정보. 서버 주소는 빌드 때 넣음(Info.plist MGServerURL), 로그인 토큰은 공유 키체인 → 공유 확장도 같은 값을 씀
 enum SharedSettings {
-    static var server: String { Keychain.get("server") ?? "" }
-    static var token: String { (Keychain.get("appToken") ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    static var server: String {
+        #if DEBUG
+        if let s = UserDefaults.standard.string(forKey: "demoServer"), !s.isEmpty { return s }
+        #endif
+        let s = (Bundle.main.object(forInfoDictionaryKey: "MGServerURL") as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.contains("$(") ? "" : s.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+    static var token: String { (Keychain.get("session") ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// 업로드할 그룹 (앱 설정 '올릴 그룹', 없으면 서버가 기본 그룹)
+    static var uploadGroup: Int? { Keychain.get("uploadGroup").flatMap(Int.init) }
     static var isConfigured: Bool { !token.isEmpty && server.hasPrefix("http") && URL(string: server) != nil }
 
     static func apiURL(_ path: String, server: String) -> URL? {
@@ -285,6 +293,7 @@ enum UploadKit {
         if let sha256 { b["sha256"] = sha256 }
         if let recordedAt { b["recorded_at"] = ISO8601DateFormatter().string(from: recordedAt) }
         if autoTranscribe { b["auto_transcribe"] = true }
+        if let g = SharedSettings.uploadGroup { b["group_id"] = g }
         return b
     }
 

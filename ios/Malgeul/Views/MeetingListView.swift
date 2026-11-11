@@ -54,6 +54,7 @@ struct MeetingListView: View {
         case .all: break
         case .pending: all = all.filter { !$0.isDone }
         case .tag(let t): all = all.filter { $0.tags.contains(t) }
+        case .group(let g, _): all = all.filter { $0.groupId == g }
         }
         return store.sorted(matching(all))
     }
@@ -82,11 +83,11 @@ struct MeetingListView: View {
     @ViewBuilder private var state: some View {
         if !config.isConfigured {
             ContentUnavailableView {
-                Label("서버 연결 필요", systemImage: "key")
+                Label("로그인 필요", systemImage: "person.crop.circle")
             } description: {
-                Text("설정에서 서버 주소와 앱 토큰을 입력하면 회의 목록이 나타납니다.\n녹음은 연결 없이도 할 수 있어요.")
+                Text("로그인하면 노트 목록이 나타납니다.\n녹음은 로그인 없이도 할 수 있어요.")
             } actions: {
-                Button("설정 열기") { router.tab = .settings }
+                Button("로그인") { router.showLogin = true }
                     .buttonStyle(.borderedProminent)
             }
         } else if !store.loaded {
@@ -227,6 +228,13 @@ struct MeetingListView: View {
                 chip("전체", n: store.meetings.count, on: filter == .all) { filter = .all }
                 let busy = store.meetings.filter { !$0.isDone }.count
                 if busy > 0 { chip("처리 전·중", n: busy, on: filter == .pending) { filter = .pending } }
+                // 그룹이 둘 이상일 때만 그룹 칩
+                if store.groups.count > 1 {
+                    ForEach(store.groups) { (g: MeetingGroup) in
+                        let on = filter == .group(g.id, g.name)
+                        chip(g.name, n: store.meetings.filter { $0.groupId == g.id }.count, on: on) { filter = on ? .all : .group(g.id, g.name) }
+                    }
+                }
                 ForEach(topTags, id: \.0) { (t: (String, Int)) in
                     chip("#\(t.0)", n: t.1, on: filter == .tag(t.0)) { filter = filter == .tag(t.0) ? .all : .tag(t.0) }
                 }
@@ -314,8 +322,28 @@ struct MeetingListView: View {
             if !m.isDone && !m.isProcessing {
                 Button { tapUnfinished(m) } label: { Label("받아쓰기", systemImage: "waveform") }
             }
+            if store.groups.count > 1 {
+                Menu {
+                    ForEach(store.groups) { (g: MeetingGroup) in
+                        Button { moveGroup(m, g) } label: {
+                            if m.groupId == g.id { Label(g.name, systemImage: "checkmark") } else { Text(g.name) }
+                        }
+                    }
+                } label: { Label("그룹 옮기기", systemImage: "folder") }
+            }
             Divider()
             Button(role: .destructive) { deleteOne = m } label: { Label("삭제", systemImage: "trash") }
+        }
+    }
+
+    private func moveGroup(_ m: Meeting, _ g: MeetingGroup) {
+        guard m.groupId != g.id else { return }
+        Task {
+            do {
+                try await API.shared.moveMeeting(m.id, toGroup: g.id)
+                var x = m; x.groupId = g.id; store.update(x)
+                await store.loadGroups()
+            } catch { errorText = error.localizedDescription }
         }
     }
 
@@ -714,12 +742,13 @@ struct RecordedAtSheet: View {
 }
 
 enum ListFilter: Equatable {
-    case all, pending, tag(String)
+    case all, pending, tag(String), group(Int, String)
     var title: String {
         switch self {
         case .all: return "전체 노트"
         case .pending: return "처리 전·중"
         case .tag(let t): return "#\(t)"
+        case .group(_, let n): return n
         }
     }
 }

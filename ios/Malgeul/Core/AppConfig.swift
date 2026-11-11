@@ -15,17 +15,29 @@ enum SpeakerMode: String, CaseIterable, Identifiable {
     var usesDeviceVoice: Bool { self == .device || self == .hybrid }
 }
 
-/// 서버 주소·앱 토큰·앱 옵션. 토큰은 키체인, 나머지는 UserDefaults.
+/// 로그인한 회원
+struct AccountUser: Codable, Equatable {
+    var id: Int
+    var email: String
+    var name: String
+    var role: String
+    var isAdmin: Bool { role == "admin" }
+}
+
+/// 서버 주소(빌드 때 고정)·로그인 토큰·앱 옵션. 토큰은 공유 키체인, 나머지는 UserDefaults.
 @MainActor
 final class AppConfig: ObservableObject {
     static let shared = AppConfig()
 
-    // 공개 저장소이므로 서버 주소·토큰은 코드에 두지 않음 — 설정 화면 또는 malgeul://setup 링크로 입력
-    static let defaultServer = ""
-
-    // 서버 주소·토큰은 공유 키체인에 저장 → 공유 확장(다른 앱에서 보내기)도 같은 값을 씀
-    @Published var server: String { didSet { Keychain.set(server, for: "server") } }
-    @Published var token: String { didSet { Keychain.set(token, for: "appToken") } }
+    // 공개 저장소라 서버 주소는 코드에 두지 않음 — CI가 빌드할 때 비밀값 MG_SERVER_URL을 Info.plist(MGServerURL)에 넣음
+    var server: String { SharedSettings.server }
+    /// 로그인 토큰 (공유 키체인 → 공유 확장도 같은 값을 씀)
+    @Published var token: String { didSet { Keychain.set(token, for: "session") } }
+    @Published var user: AccountUser? {
+        didSet { UserDefaults.standard.set(user.flatMap { try? JSONEncoder().encode($0) }, forKey: "account") }
+    }
+    /// 올릴 그룹 (없으면 서버의 기본 그룹)
+    @Published var uploadGroup: Int? { didSet { Keychain.set(uploadGroup.map(String.init) ?? "", for: "uploadGroup") } }
     /// 녹음을 올린 뒤 압축이 끝나면 바로 AssemblyAI 받아쓰기 시작
     @Published var autoTranscribeRecordings: Bool { didSet { UserDefaults.standard.set(autoTranscribeRecordings, forKey: "autoTranscribe") } }
     /// 업로드가 끝난 녹음 파일을 기기에서 지울지
@@ -52,10 +64,11 @@ final class AppConfig: ObservableObject {
 
     private init() {
         let d = UserDefaults.standard
-        server = Keychain.get("server") ?? AppConfig.defaultServer
-        // 예전 Tailscale 직통 주소는 더 쓰지 않음 → 남아 있으면 지움
-        if Keychain.get("tailscale") != nil { Keychain.set("", for: "tailscale") }
-        token = Keychain.get("appToken") ?? ""
+        // 예전 방식(서버 주소·공용 앱 토큰·Tailscale 직통 주소)은 더 쓰지 않음 → 지우고 로그인부터
+        for k in ["server", "appToken", "tailscale"] where Keychain.get(k) != nil { Keychain.set("", for: k) }
+        token = Keychain.get("session") ?? ""
+        user = d.data(forKey: "account").flatMap { try? JSONDecoder().decode(AccountUser.self, from: $0) }
+        uploadGroup = Keychain.get("uploadGroup").flatMap(Int.init)
         autoTranscribeRecordings = d.object(forKey: "autoTranscribe") as? Bool ?? false
         deleteAfterUpload = d.object(forKey: "deleteAfterUpload") as? Bool ?? false
         let e = TranscribeEngine.current
@@ -72,12 +85,10 @@ final class AppConfig: ObservableObject {
         !token.trimmingCharacters(in: .whitespaces).isEmpty && server.hasPrefix("http") && URL(string: server) != nil
     }
 
-    /// malgeul://setup?server=https://...&token=...
-    func handleSetupURL(_ url: URL) -> Bool {
-        guard url.scheme == "malgeul", url.host == "setup",
-              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return false }
-        if let s = items.first(where: { $0.name == "server" })?.value, !s.isEmpty { server = s }
-        if let t = items.first(where: { $0.name == "token" })?.value, !t.isEmpty { token = t }
-        return true
+    /// 로그아웃: 토큰·회원 정보 지움 (기기에 있는 녹음은 남김)
+    func signOut() {
+        token = ""
+        user = nil
+        uploadGroup = nil
     }
 }

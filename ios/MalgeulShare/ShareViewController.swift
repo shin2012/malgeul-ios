@@ -294,7 +294,7 @@ struct ShareView: View {
             Form {
                 if !model.configured && !model.copyMode {
                     Section {
-                        Label("말글 앱 설정에서 먼저 서버를 연결해 주세요.", systemImage: "key")
+                        Label("말글 앱에서 먼저 로그인해 주세요.", systemImage: "key")
                             .foregroundStyle(.secondary)
                     }
                 }

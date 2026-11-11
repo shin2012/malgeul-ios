@@ -11,6 +11,8 @@ final class Router: ObservableObject {
     @Published var meetingID: Int?
     /// 녹음 탭으로 가면서 바로 녹음 시작
     @Published var startRecordingRequest = false
+    /// 로그인 화면 (로그인 안 했으면 앱을 열 때 띄움)
+    @Published var showLogin = false
     /// 스크린샷용(DEBUG): 상세 화면에서 채팅·문서 바로 열기
     var debugOpenChat = false
     var debugOpenDoc = false
@@ -25,8 +27,11 @@ enum DebugRoute {
 
     static func apply() {
         let d = UserDefaults.standard
-        if let s = d.string(forKey: "demoServer") { AppConfig.shared.server = s }
-        if let t = d.string(forKey: "demoToken") { AppConfig.shared.token = t }
+        // demoServer는 SharedSettings.server가 직접 읽음
+        if let t = d.string(forKey: "demoToken") {
+            AppConfig.shared.token = t
+            AppConfig.shared.user = AccountUser(id: 1, email: "demo@example.com", name: "시험 사용자", role: "admin")
+        }
         let r = Router.shared
         switch d.string(forKey: "screen") ?? "" {
         case "detail": r.meetingID = 5
@@ -34,6 +39,7 @@ enum DebugRoute {
         case "doc": r.meetingID = 5; r.debugOpenDoc = true
         case "record": r.tab = .record
         case "settings": r.tab = .settings
+        case "login": AppConfig.shared.signOut(); r.showLogin = true
         case "uploadtest":
             // 조각 업로드 시험: 1분짜리 wav(약 2.8MB)를 만들어 올림 → 압축 → 가짜 서버의 작은 조각(100KB)으로 여러 번 전송
             Task { @MainActor in
@@ -140,11 +146,6 @@ struct MalgeulApp: App {
             uploads.enqueueImported(url)
             return
         }
-        if config.handleSetupURL(url) {
-            router.tab = .meetings
-            Task { await store.refresh() }
-            return
-        }
         // malgeul://record (잠금 화면 녹음 표시를 누름)
         if url.scheme == "malgeul", url.host == "record" {
             router.tab = .record
@@ -187,6 +188,12 @@ struct RootView: View {
 
     private var root: some View {
         MeetingsSplitView()
+            .fullScreenCover(isPresented: $router.showLogin) { LoginView() }
+            .onAppear { if !config.isConfigured { router.showLogin = true } else { Task { await API.shared.refreshMe() } } }
+            .onChange(of: config.token) { _, t in
+                // 로그아웃·로그인 풀림 → 목록 비우고 로그인 화면
+                if t.isEmpty { store.clear(); router.tab = .meetings; router.showLogin = true }
+            }
             .sheet(isPresented: Binding(get: { router.tab == .record }, set: { if !$0 { router.tab = .meetings } })) {
                 RecordTabView()
             }

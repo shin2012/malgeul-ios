@@ -6,10 +6,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 TOKEN = "Bearer demo"
 
 def meeting(i, title, status, tags, dur, size, cost, audio=1, ai=1, err=None, day=7):
-    return {"id": i, "title": title, "original_filename": f"녹음 {i}.m4a", "duration_seconds": dur, "file_size_bytes": size,
+    return {"id": i, "group_id": 2 if i in (2, 4) else 1, "title": title, "original_filename": f"녹음 {i}.m4a", "duration_seconds": dur, "file_size_bytes": size,
             "status": status, "cost_usd": None if cost is None else f"{cost:.6f}", "error_message": err, "ai_analyzed": ai,
             "audio_ready": audio, "created_at": f"2026-11-0{day}T05:10:00.000Z", "recorded_at": f"2026-11-0{day}T01:00:00.000Z",
             "transcribed_at": None, "segment_count": 12, "tags": tags}
+
+USER = {"id": 1, "email": "demo@example.com", "name": "시험 사용자", "role": "admin"}
+GROUPS = [{"id": 1, "name": "기본", "is_default": 1, "meeting_count": 5}, {"id": 2, "name": "팀 회의", "is_default": 0, "meeting_count": 2}]
 
 MEETINGS = [
     meeting(7, "새 녹음", "pending", [], None, 2_400_000, None, audio=0, ai=0, day=8),
@@ -92,9 +95,15 @@ class H(BaseHTTPRequestHandler):
         p = self.path.split("?")[0]
         if p == "/health": return self.send(200, {"ok": True})
         if not p.startswith("/app/api/"): return self.send(404, {"error": "Not Found"})
+        if p == "/app/api/auth/login":
+            self.body(); return self.send(200, {"token": "demo", "user": USER})
+        if p in ("/app/api/auth/signup", "/app/api/auth/reset-request"):
+            self.body(); return self.send(200, {"message": "가입 신청이 접수되었습니다. 관리자가 승인하면 메일로 알려 드립니다."})
         if self.headers.get("Authorization") != TOKEN: return self.send(401, {"error": "앱 토큰이 올바르지 않습니다"})
         parts = p[len("/app/api/"):].strip("/").split("/")
         if parts == ["meetings"]: return self.send(200, MEETINGS)
+        if parts == ["auth", "me"]: return self.send(200, {"user": USER})
+        if parts == ["groups"]: return self.send(200, GROUPS)
         if parts[0] == "uploads": return self.uploads(parts[1:])
         if parts == ["util", "exchange-rate"]: return self.send(200, {"rate": 1380.5})
         if parts[0] == "meetings" and len(parts) >= 2 and parts[1].isdigit():

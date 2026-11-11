@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 enum APIError: LocalizedError {
     case notConfigured
@@ -7,8 +8,8 @@ enum APIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: return "설정에서 서버 주소와 앱 토큰을 입력해 주세요."
-        case .http(401, _): return "앱 토큰이 올바르지 않습니다. 설정에서 확인해 주세요."
+        case .notConfigured: return "로그인이 필요합니다."
+        case .http(401, let msg): return msg.isEmpty ? "로그인이 필요합니다." : msg
         case .http(let code, let msg): return msg.isEmpty ? "HTTP \(code)" : msg
         case .badResponse: return "응답 파싱 오류"
         }
@@ -36,12 +37,78 @@ final class API {
 
     var config: AppConfig { AppConfig.shared }
 
-    func baseURL(_ server: String? = nil) throws -> URL {
+    func baseURL(_ server: String? = nil, requireLogin: Bool = true) throws -> URL {
         let s = (server ?? config.server).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard config.isConfigured, var u = URL(string: s) else { throw APIError.notConfigured }
+        guard s.hasPrefix("http"), var u = URL(string: s) else { throw APIError.http(0, "서버 주소가 빌드에 들어 있지 않습니다") }
+        if requireLogin && !config.isConfigured { throw APIError.notConfigured }
         u.append(path: "app/api")
         return u
     }
+
+    // MARK: 회원 (로그인 전에도 부름)
+
+    private func publicJSON(_ path: String, _ body: [String: Any]) async throws -> [String: Any] {
+        guard let u = URL(string: try baseURL(requireLogin: false).absoluteString + "/" + path) else { throw APIError.badResponse }
+        var r = URLRequest(url: u)
+        r.httpMethod = "POST"
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (d, resp) = try await session.data(for: r)
+        try Self.check(resp, d)
+        return (try JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
+    }
+
+    /// 로그인 → 토큰·회원 정보 저장
+    func login(email: String, password: String) async throws {
+        let o = try await publicJSON("auth/login", ["email": email, "password": password, "client": "app",
+                                                    "device_name": UIDevice.current.name + " · 말글 앱"])
+        guard let t = o["token"] as? String, let u = o["user"] as? [String: Any],
+              let d = try? JSONSerialization.data(withJSONObject: u),
+              let user = try? JSONDecoder().decode(AccountUser.self, from: d) else { throw APIError.badResponse }
+        config.token = t
+        config.user = user
+    }
+    /// 가입 신청 (관리자 승인 후 사용) → 안내 문구
+    func signup(email: String, password: String, name: String) async throws -> String {
+        let o = try await publicJSON("auth/signup", ["email": email, "password": password, "name": name])
+        return o["message"] as? String ?? "가입 신청이 접수되었습니다."
+    }
+    func resetRequest(email: String) async throws -> String {
+        let o = try await publicJSON("auth/reset-request", ["email": email])
+        return o["message"] as? String ?? "메일을 보냈습니다."
+    }
+    /// 회원 정보 새로 받기 (이름·권한 바뀜 반영)
+    func refreshMe() async {
+        guard let d = try? await data("auth/me"),
+              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let u = o["user"],
+              let ud = try? JSONSerialization.data(withJSONObject: u),
+              let user = try? JSONDecoder().decode(AccountUser.self, from: ud) else { return }
+        config.user = user
+    }
+    func logout() async {
+        _ = try? await data("auth/logout", method: "POST", json: [:])
+        config.signOut()
+    }
+    func deleteAccount(password: String) async throws {
+        try await data("auth/account", method: "DELETE", json: ["password": password])
+        config.signOut()
+    }
+    func rename(user name: String) async throws {
+        try await data("auth/me", method: "PATCH", json: ["name": name])
+        config.user?.name = name
+    }
+
+    // MARK: 그룹
+
+    func groups() async throws -> [MeetingGroup] {
+        let d = try await data("groups")
+        DiskCache.save(d, key: "groups")
+        return try decode([MeetingGroup].self, d)
+    }
+    func createGroup(_ name: String) async throws { try await data("groups", method: "POST", json: ["name": name]) }
+    func renameGroup(_ id: Int, _ name: String) async throws { try await data("groups/\(id)", method: "PATCH", json: ["name": name]) }
+    func deleteGroup(_ id: Int) async throws { try await data("groups/\(id)", method: "DELETE") }
+    func moveMeeting(_ id: Int, toGroup g: Int) async throws { try await data("meetings/\(id)/group", method: "PATCH", json: ["group_id": g]) }
 
     func url(_ path: String, server: String? = nil) throws -> URL {
         // path 예: "meetings/12/report.html?download=1"
@@ -76,6 +143,10 @@ final class API {
         guard (200..<300).contains(h.statusCode) else {
             var msg = ""
             if let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let e = o["error"] as? String { msg = e }
+            // 로그인이 풀림(만료·다른 기기에서 비밀번호 변경·사용 중지) → 로그인 화면으로
+            if h.statusCode == 401, (try? JSONSerialization.jsonObject(with: d) as? [String: Any])?["login"] as? Bool == true {
+                Task { @MainActor in AppConfig.shared.signOut() }
+            }
             throw APIError.http(h.statusCode, msg)
         }
     }

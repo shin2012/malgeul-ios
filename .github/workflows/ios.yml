@@ -47,6 +47,7 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      MG_SERVER_URL: ${{ secrets.MG_SERVER_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Xcode
@@ -124,6 +125,7 @@ jobs:
             -destination 'generic/platform=iOS' -archivePath $RUNNER_TEMP/App.xcarchive \
             DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Automatic \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            MG_SERVER_URL="$MG_SERVER_URL" \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
             -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID \

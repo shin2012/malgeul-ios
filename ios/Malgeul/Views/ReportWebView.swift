@@ -127,7 +127,7 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
 
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse) async -> WKNavigationResponsePolicy {
         if let h = response.response as? HTTPURLResponse, response.isForMainFrame, !(200..<300).contains(h.statusCode) {
-            loadError = h.statusCode == 404 ? "생성된 문서가 없습니다" : h.statusCode == 401 ? "앱 토큰이 올바르지 않습니다" : "HTTP \(h.statusCode)"
+            loadError = h.statusCode == 404 ? "생성된 문서가 없습니다" : h.statusCode == 401 ? "로그인이 필요합니다" : "HTTP \(h.statusCode)"
         }
         return .allow
     }

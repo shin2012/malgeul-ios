@@ -26,6 +26,7 @@ final class MeetingStore: ObservableObject {
     @Published private(set) var loaded = false
     @Published var lastError: String?
     @Published var krwRate: Double?
+    @Published private(set) var groups: [MeetingGroup] = []
     @Published var sortKey: SortKey = SortKey(rawValue: UserDefaults.standard.string(forKey: "sortKey") ?? "") ?? .createdAt {
         didSet { UserDefaults.standard.set(sortKey.rawValue, forKey: "sortKey") }
     }
@@ -40,6 +41,17 @@ final class MeetingStore: ObservableObject {
             meetings = list
             loaded = true
         }
+        if let d = DiskCache.load(key: "groups"), let g = try? JSONDecoder().decode([MeetingGroup].self, from: d) { groups = g }
+    }
+
+    func loadGroups() async {
+        if let g = try? await API.shared.groups() { groups = g }
+    }
+
+    /// 로그아웃 시 화면·캐시 비움
+    func clear() {
+        meetings = []; groups = []; loaded = false
+        DiskCache.remove(key: "meetings"); DiskCache.remove(key: "groups")
     }
 
     func refresh() async {
@@ -54,6 +66,7 @@ final class MeetingStore: ObservableObject {
         }
         loaded = true
         schedulePolling()
+        await loadGroups()
         if krwRate == nil { krwRate = await API.shared.exchangeRate() }
     }
 

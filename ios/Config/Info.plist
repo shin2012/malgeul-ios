@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>말글</string>
+	<key>MGServerURL</key>
+	<string>$(MG_SERVER_URL)</string>
 	<key>SharedKeychainGroup</key>
 	<string>$(AppIdentifierPrefix)kr.b-612.malgeul.shared</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
