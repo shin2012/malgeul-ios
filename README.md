@@ -18,6 +18,7 @@
 | 구분 | 내용 |
 |------|------|
 | 🎙️ 녹음 | 앱에서 바로 녹음(AAC 모노 24kHz), 일시정지·이어서, 화면이 꺼져도 계속 녹음, 전화 등 끼어들기 후 자동 이어 녹음, 실시간 파형 |
+| 🔒 잠금 화면 상태 | 녹음 중 잠금 화면·다이내믹 아일랜드에 녹음 시간과 일시정지/계속 버튼(라이브 액티비티). 통화로 잠시 멈춤·녹음 멈춤을 표시하고, 앱이 30초마다 녹음을 확인하므로 2분 넘게 확인이 끊기면(앱 강제 종료 등) '상태 확인 안 됨'으로 바뀜. 누르면 녹음 화면으로 |
 | ⬆️ 업로드 | 녹음 끝 → 제목 입력 → 업로드(녹음 시작 시각을 녹음 시각으로 저장), 선택 시 압축이 끝나면 바로 받아쓰기 |
 | 📂 파일 추가 | 파일 앱에서 가져오기 |
 | ⌚ 애플워치 녹음 | 워치에서 녹음 버튼 → 화면이 꺼져도 계속 녹음, 시작 위치를 장소 이름으로 기록 → 끝내면 아이폰으로 전송(폰이 멀면 연결될 때 자동 전송). 아이폰은 받아서 '내 녹음'에 넣고 서버 설정이 있으면 바로 업로드(자동 받아쓰기 설정 따름). 워치 목록에 파일 이름·녹음 시각·길이·장소·전송 상태 표시 |
@@ -83,5 +84,5 @@ Mac 없이 GitHub Actions에서 빌드합니다.
 - 프로젝트 파일은 `ios/gen_project.py`로 생성합니다(동기화 폴더 방식이라 `ios/Malgeul/` 안의 Swift 파일은 자동 포함). Swift 패키지: FluidAudio(화자 구분) — 포크 `shin2012/FluidAudio`의 `malgeul` 브랜치(main `e63b523` + 받아쓰기 정규화용 NemoTextProcessing 바이너리 제거: 배포 파일이 504로 자주 실패하고 쓰지 않음)에 고정. 0.9.1 태그는 Xcode 26 최신 컴파일러에서 동시성 오류.
 - 순수 로직 시험(맞추기·유사도): `ios/LogicTests/run.sh` (리눅스 Swift 툴체인)
 - 필요한 저장소 비밀값: `ASC_KEY_P8`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `APPLE_TEAM_ID`
-- 번들 ID: `kr.b-612.malgeul` (앱), `kr.b-612.malgeul.share` (공유 확장), `kr.b-612.malgeul.watchkitapp` (워치 앱, `ios/MalgeulWatch`, watchOS 10+, WatchConnectivity `transferFile`로 전달)
+- 번들 ID: `kr.b-612.malgeul` (앱), `kr.b-612.malgeul.share` (공유 확장), `kr.b-612.malgeul.widget` (라이브 액티비티 위젯, `ios/MalgeulWidget` + 앱과 함께 쓰는 `ios/LiveActivity`), `kr.b-612.malgeul.watchkitapp` (워치 앱, `ios/MalgeulWatch`, watchOS 10+, WatchConnectivity `transferFile`로 전달)
 - 앱과 공유 확장은 공유 키체인 그룹(`kr.b-612.malgeul.shared`)으로 서버 주소·토큰을 함께 씀(App Group 미사용)
