@@ -213,11 +213,17 @@ enum UploadKit {
         }
     }
 
-    /// 서버 앞단(Cloudflare)이 받는 한 번 업로드 한도 100MB보다 조금 작게
-    static let uploadLimit: Int64 = 95 * 1024 * 1024
+    /// 이미 작은 음성 파일이면(AAC·MP3, 72kbps 이하 — 앱 녹음·워치 녹음 등) 압축하지 않고 그대로 올림
+    static func needsShrink(_ url: URL) async -> Bool {
+        let ext = url.pathExtension.lowercased()
+        guard ["m4a", "aac", "mp3"].contains(ext) else { return true }
+        guard let d = try? await AVURLAsset(url: url).load(.duration), d.seconds.isFinite, d.seconds > 1 else { return true }
+        let kbps = Double(fileSize(url)) * 8 / d.seconds / 1000
+        return kbps > 72
+    }
 
-    /// 한도를 넘는 파일은 음성만 뽑아 AAC 모노 24kHz 32kbps(1시간 약 14MB)로 줄임.
-    /// 받아쓰기엔 충분한 음질 (서버도 어차피 16kHz로 다시 압축함). 줄인 파일 이름은 .m4a
+    /// 업로드 전 압축: 음성만 뽑아 AAC 모노 24kHz 48kbps(1시간 약 21MB) — 앱 녹음과 같은 설정.
+    /// 서버가 받아쓰기에 쓰는 최종본(16kHz·32kbps)보다 음질이 높아 인식에는 영향 없음. 동영상은 소리만.
     static func shrinkAudio(_ src: URL, to out: URL) async throws {
         let asset = AVURLAsset(url: src)
         guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
@@ -235,7 +241,7 @@ enum UploadKit {
             reader.add(output)
             let writer = try AVAssetWriter(outputURL: out, fileType: .m4a)
             let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
-                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 24_000, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 32_000,
+                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 24_000, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 48_000,
             ])
             input.expectsMediaDataInRealTime = false
             writer.add(input)
@@ -253,6 +259,33 @@ enum UploadKit {
             await writer.finishWriting()
             if writer.status != .completed { throw writer.error ?? NSError(domain: "malgeul", code: 7) }
         }.value
+    }
+
+    /// 조각 파일 만들기 (index 번째 chunkSize 구간)
+    static func writeChunk(of src: URL, index: Int, chunkSize: Int64, to out: URL) throws {
+        let r = try FileHandle(forReadingFrom: src)
+        defer { try? r.close() }
+        try r.seek(toOffset: UInt64(Int64(index) * chunkSize))
+        FileManager.default.createFile(atPath: out.path, contents: nil)
+        let w = try FileHandle(forWritingTo: out)
+        defer { try? w.close() }
+        var left = chunkSize
+        while left > 0 {
+            let n = Int(min(left, 4 * 1024 * 1024))
+            let d = autoreleasepool { r.readData(ofLength: n) }
+            if d.isEmpty { break }
+            try w.write(contentsOf: d)
+            left -= Int64(d.count)
+        }
+    }
+
+    /// 조각 업로드 시작 요청 본문 (서버 POST /uploads)
+    static func initBody(filename: String, size: Int64, sha256: String?, recordedAt: Date?, autoTranscribe: Bool) -> [String: Any] {
+        var b: [String: Any] = ["filename": filename, "size": size]
+        if let sha256 { b["sha256"] = sha256 }
+        if let recordedAt { b["recorded_at"] = ISO8601DateFormatter().string(from: recordedAt) }
+        if autoTranscribe { b["auto_transcribe"] = true }
+        return b
     }
 
     /// 줄인 파일 이름: 확장자만 .m4a로

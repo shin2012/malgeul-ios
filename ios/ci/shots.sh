@@ -58,6 +58,7 @@ for kind in "iPhone" "iPad Pro"; do
     fi
     xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE" "${ARGS[@]}" -screen "$s" >/dev/null
     if [ $first = 1 ]; then sleep 15; first=0; else sleep 7; fi
+    [ "$s" = uploadtest ] && sleep 30
     xcrun simctl io "$UDID" screenshot "$OUT/${NAME}-${s}.png" >/dev/null 2>&1 && echo "shot $NAME $s"
     if xcrun simctl spawn "$UDID" launchctl list | grep -q "$BUNDLE"; then echo "alive $NAME $s"; else echo "CRASHED $NAME $s"; fi
   done

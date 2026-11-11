@@ -33,6 +33,9 @@ jobs:
         env:
           SCREENS: ${{ inputs.screens }}
         run: bash ios/ci/shots.sh /tmp/dd/Build/Products/Debug-iphonesimulator/Malgeul.app /tmp/shots
+      - name: 가짜 서버 기록
+        if: always()
+        run: tail -80 /tmp/server.log || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

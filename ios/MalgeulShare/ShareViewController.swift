@@ -39,6 +39,9 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
     @Published var phase: Phase = .loading
     @Published var status = ""
     @Published var progress: Double = 0
+    /// 조각 업로드 진행률 계산용 (앞 조각까지 비율, 이번 조각 비율)
+    private var chunkBase = 0.0
+    private var chunkShare = 1.0
     @Published var results: [String] = []
     var close: () -> Void = {}
 
@@ -147,20 +150,18 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
                         continue
                     }
                     status = "\(label)올리는 중..."
-                    // 100MB 한도를 넘으면 음성만 압축해서 올림
+                    // 올리기 전 음성 압축 (이미 작은 음성 파일이면 그대로, 실패하면 원본)
                     var up = f.url
                     var upName = name
                     var small: URL?
-                    if f.size > UploadKit.uploadLimit {
-                        status = "\(label)\(f.size / 1024 / 1024)MB라 음성만 압축하는 중..."
+                    if await UploadKit.needsShrink(f.url) {
+                        status = "\(label)음성 압축 중..."
                         let s = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).m4a")
-                        try await UploadKit.shrinkAudio(f.url, to: s)
-                        guard UploadKit.fileSize(s) <= UploadKit.uploadLimit else {
+                        if (try? await UploadKit.shrinkAudio(f.url, to: s)) != nil {
+                            small = s; up = s; upName = UploadKit.shrunkName(name)
+                        } else {
                             try? FileManager.default.removeItem(at: s)
-                            results.append("⚠️ \(name): 압축해도 100MB를 넘어 올릴 수 없습니다")
-                            continue
                         }
-                        small = s; up = s; upName = UploadKit.shrunkName(name)
                         status = "\(label)올리는 중..."
                     }
                     defer { if let small { try? FileManager.default.removeItem(at: small) } }
@@ -207,20 +208,52 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
         return ((o?["existing"] as? [String: Any])?["title"] as? String) ?? "(제목 없음)"
     }
 
+    /// 조각 업로드 (서버가 정한 크기, 보통 50MB — Cloudflare 100MB 한도). 중복 판단은 압축 전 원본 해시
     private func upload(_ f: SharedFile, from source: URL, name: String, base: String) async throws -> String {
-        let body = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).body")
-        defer { try? FileManager.default.removeItem(at: body) }
-        let boundary = "malgeul-\(UUID().uuidString)"
-        // 받아쓰기 방식이 '이 기기'면 서버 자동 받아쓰기 대신 대기 목록에 넣고 앱이 열릴 때 처리
-        let fields = autoTranscribe && !deviceMode ? ["auto_transcribe": "1"] : [:]
-        let src = source
-        try await Task.detached(priority: .userInitiated) {
-            try UploadKit.writeMultipart(source: src, filename: name, fields: fields, boundary: boundary, to: body)
-        }.value
-        var r = try request("meetings/upload", base: base, method: "POST")
-        r.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        r.timeoutInterval = 600
-        let (d, resp) = try await URLSession.shared.upload(for: r, fromFile: body, delegate: self)
+        let hash = await Task.detached(priority: .userInitiated) { UploadKit.sha256(of: f.url) }.value
+        let size = UploadKit.fileSize(source)
+        let recorded = await Self.recordedDate(f.url)
+        var r0 = try request("uploads", base: base, method: "POST")
+        r0.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r0.httpBody = try JSONSerialization.data(withJSONObject: UploadKit.initBody(
+            filename: name, size: size, sha256: hash, recordedAt: recorded, autoTranscribe: autoTranscribe && !deviceMode))
+        let (d0, resp0) = try await URLSession.shared.data(for: r0)
+        try Self.check(resp0, d0)
+        let o0 = (try JSONSerialization.jsonObject(with: d0) as? [String: Any]) ?? [:]
+        if o0["duplicate"] as? Bool == true {
+            return "이미 같은 파일이 있습니다: \(((o0["existing"] as? [String: Any])?["title"] as? String) ?? "")"
+        }
+        guard let uid = o0["uploadId"] as? String, let cs = (o0["chunkSize"] as? NSNumber)?.int64Value,
+              let n = (o0["chunks"] as? NSNumber)?.intValue else { throw ShareError("서버 응답 오류") }
+        let part = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).part")
+        defer { try? FileManager.default.removeItem(at: part) }
+        for i in 0..<n {
+            try await Task.detached(priority: .userInitiated) {
+                try UploadKit.writeChunk(of: source, index: i, chunkSize: cs, to: part)
+            }.value
+            var r = try request("uploads/\(uid)/\(i)", base: base, method: "PUT")
+            r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+            r.timeoutInterval = 600
+            chunkBase = Double(Int64(i) * cs) / Double(max(size, 1))
+            chunkShare = Double(UploadKit.fileSize(part)) / Double(max(size, 1))
+            var tries = 0
+            while true {
+                do {
+                    let (d, resp) = try await URLSession.shared.upload(for: r, fromFile: part, delegate: self)
+                    try Self.check(resp, d)
+                    break
+                } catch {
+                    tries += 1
+                    if tries >= 3 { throw error }
+                    try await Task.sleep(for: .seconds(2 * tries))
+                }
+            }
+        }
+        var rc = try request("uploads/\(uid)/complete", base: base, method: "POST")
+        rc.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        rc.httpBody = Data("{}".utf8)
+        rc.timeoutInterval = 600
+        let (d, resp) = try await URLSession.shared.data(for: rc)
         try Self.check(resp, d)
         let o = try JSONSerialization.jsonObject(with: d) as? [String: Any]
         if o?["duplicate"] as? Bool == true {
@@ -234,7 +267,7 @@ final class ShareModel: NSObject, ObservableObject, URLSessionTaskDelegate {
                                 totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
         guard totalBytesExpectedToSend > 0 else { return }
         let p = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
-        Task { @MainActor in self.progress = p }
+        Task { @MainActor in self.progress = min(1, self.chunkBase + self.chunkShare * p) }
     }
 
     static func check(_ resp: URLResponse, _ d: Data) throws {

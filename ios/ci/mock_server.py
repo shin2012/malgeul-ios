@@ -76,6 +76,10 @@ def tone_wav():
     w.close()
     return buf.getvalue()
 
+# 조각 업로드 시험용 (작은 조각으로 여러 번 오가게)
+UP_CHUNK = 100 * 1024
+UPLOADS = {}
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
@@ -91,6 +95,7 @@ class H(BaseHTTPRequestHandler):
         if self.headers.get("Authorization") != TOKEN: return self.send(401, {"error": "앱 토큰이 올바르지 않습니다"})
         parts = p[len("/app/api/"):].strip("/").split("/")
         if parts == ["meetings"]: return self.send(200, MEETINGS)
+        if parts[0] == "uploads": return self.uploads(parts[1:])
         if parts == ["util", "exchange-rate"]: return self.send(200, {"rate": 1380.5})
         if parts[0] == "meetings" and len(parts) >= 2 and parts[1].isdigit():
             mid = int(parts[1]); rest = parts[2:]
@@ -106,6 +111,40 @@ class H(BaseHTTPRequestHandler):
             self.wfile.write(b'data: {"type":"progress","message":"AssemblyAI \xeb\x8c\x80\xea\xb8\xb0 \xec\xa4\x91..."}\n\n'); self.wfile.flush()
             import time; time.sleep(60); return
         return self.send(200, {"ok": True})
+
+    def body(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(n) if n else b""
+
+    def uploads(self, rest):
+        import uuid, hashlib, sys
+        m = self.command
+        if not rest and m == "POST":
+            b = json.loads(self.body() or b"{}")
+            uid = str(uuid.uuid4()); size = int(b["size"]); n = (size + UP_CHUNK - 1) // UP_CHUNK
+            UPLOADS[uid] = {"meta": b, "chunks": n, "parts": {}}
+            print(f"[uploads] init {uid} {b.get('filename')} size={size} chunks={n} sha={str(b.get('sha256'))[:12]} rec={b.get('recorded_at')} auto={b.get('auto_transcribe')}", flush=True)
+            return self.send(200, {"uploadId": uid, "chunkSize": UP_CHUNK, "chunks": n})
+        u = UPLOADS.get(rest[0]) if rest else None
+        if not u: return self.send(404, {"error": "업로드 없음"})
+        if len(rest) == 1 and m == "GET":
+            return self.send(200, {"received": sorted(u["parts"]), "chunks": u["chunks"], "chunkSize": UP_CHUNK})
+        if len(rest) == 2 and rest[1] == "complete":
+            self.body()
+            miss = [i for i in range(u["chunks"]) if i not in u["parts"]]
+            if miss: return self.send(409, {"error": "조각 부족", "missing": miss})
+            whole = b"".join(u["parts"][i] for i in range(u["chunks"]))
+            ok = len(whole) == int(u["meta"]["size"])
+            print(f"[uploads] complete {rest[0]} bytes={len(whole)} size_ok={ok} head={whole[:12]!r}", flush=True)
+            if not ok: return self.send(400, {"error": "크기 다름"})
+            return self.send(200, {"id": 99, "title": u["meta"]["filename"].rsplit(".", 1)[0], "status": "pending", "audio_ready": 0})
+        if len(rest) == 2 and m == "PUT":
+            data = self.body(); i = int(rest[1])
+            u["parts"][i] = data
+            print(f"[uploads] chunk {i}/{u['chunks']} {len(data)}B ctype={self.headers.get('Content-Type')}", flush=True)
+            return self.send(200, {"ok": True, "index": i})
+        if m == "DELETE": return self.send(200, {"ok": True})
+        return self.send(400, {"error": "?"})
 
     do_GET = route
     do_POST = route

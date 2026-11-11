@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 enum AppTab: Hashable { case meetings, record, settings }
 
@@ -33,6 +34,22 @@ enum DebugRoute {
         case "doc": r.meetingID = 5; r.debugOpenDoc = true
         case "record": r.tab = .record
         case "settings": r.tab = .settings
+        case "uploadtest":
+            // 조각 업로드 시험: 1분짜리 wav(약 2.8MB)를 만들어 올림 → 압축 → 가짜 서버의 작은 조각(100KB)으로 여러 번 전송
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                let url = FileManager.default.temporaryDirectory.appending(path: "업로드시험.wav")
+                let fmt = AVAudioFormat(standardFormatWithSampleRate: 24_000, channels: 1)!
+                if let f = try? AVAudioFile(forWriting: url, settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 24_000,
+                                                                        AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16]),
+                   let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: 24_000 * 60) {
+                    buf.frameLength = 24_000 * 60
+                    let p = buf.floatChannelData![0]
+                    for i in 0..<Int(buf.frameLength) { p[i] = 0.3 * sinf(Float(i) / 24_000 * 2 * .pi * 440) }
+                    try? f.write(from: buf)
+                }
+                UploadCenter.shared.enqueue(file: url, filename: "업로드시험.wav", recordedAt: .now, autoTranscribe: true)
+            }
         case "live": livePreview = .light
         case "livedark": livePreview = .dark
         case "real", "realdark":
