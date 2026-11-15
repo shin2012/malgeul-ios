@@ -48,5 +48,33 @@ try:
             '-recordingSelfTest', 'NO', '-recordingDeniedTest', 'NO', '-screen', screen)
         time.sleep(5)
         sim('io', udid, 'screenshot', str(out / (screen + '.png')))
+    sim('ui', udid, 'content_size', 'extra-extra-extra-large')
+    sim('launch', '--terminate-running-process', udid, bundle,
+        '-demoServer', 'http://127.0.0.1:8080', '-demoToken', 'demo',
+        '-recordingSelfTest', 'NO', '-recordingDeniedTest', 'NO', '-screen', 'live')
+    time.sleep(5)
+    sim('io', udid, 'screenshot', str(out / 'live-large.png'))
+    sim('ui', udid, 'content_size', 'large')
 finally:
     sim('shutdown', udid)
+
+# 아일랜드 없는 아이패드에서는 같은 미리보기와 기존 잠금 화면 카드의 회귀를 확인한다.
+ipads = [d for runtime, group in devices.items() if 'iOS' in runtime for d in group if d['name'].startswith('iPad Pro')]
+assert ipads, '아이패드 시뮬레이터가 없음'
+ipad = ipads[0]['udid']
+try:
+    if ipads[0]['state'] != 'Booted': sim('boot', ipad)
+    sim('bootstatus', ipad, '-b')
+    sim('install', ipad, app)
+    for screen in ['live', 'livedark']:
+        sim('launch', '--terminate-running-process', ipad, bundle,
+            '-demoServer', 'http://127.0.0.1:8080', '-demoToken', 'demo', '-screen', screen)
+        time.sleep(7)
+        sim('io', ipad, 'screenshot', str(out / ('ipad-' + screen + '.png')))
+    sim('ui', ipad, 'content_size', 'extra-extra-extra-large')
+    sim('launch', '--terminate-running-process', ipad, bundle,
+        '-demoServer', 'http://127.0.0.1:8080', '-demoToken', 'demo', '-screen', 'live')
+    time.sleep(5)
+    sim('io', ipad, 'screenshot', str(out / 'ipad-live-large.png'))
+finally:
+    sim('shutdown', ipad)

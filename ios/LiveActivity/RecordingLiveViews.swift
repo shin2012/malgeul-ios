@@ -188,11 +188,46 @@ struct LiveIslandLeading: View {
                 Text(shown.shortLabel).font(.subheadline.weight(.semibold)).foregroundStyle(c).lineLimit(1)
             }
         }
-        .frame(maxHeight: .infinity, alignment: .leading)
+        .frame(height: 40, alignment: .leading)
     }
 }
 
-/// 다이내믹 아일랜드 펼친 모양 아래: 녹음 제목·안내 + 일시정지/계속 버튼
+/// 아일랜드는 높이가 제한되어 있으므로 잠금 화면의 세로 버튼과 분리한다.
+struct LiveIslandControls: View {
+    let shown: LiveShown
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if shown.canToggle {
+                Button(intent: ToggleRecordingPauseIntent()) {
+                    Image(systemName: shown.isPaused ? "play.fill" : "pause.fill")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.black)
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(shown.isPaused ? LiveColors.rec : LiveColors.navyLight))
+                }
+                .accessibilityLabel(shown.isPaused ? "계속 녹음" : "일시정지")
+                .accessibilityIdentifier("recording.island.pause")
+            }
+            if shown.canStop {
+                Button(intent: StopRecordingIntent()) {
+                    Image(systemName: "stop.fill")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(Color(white: 0.3)))
+                }
+                .accessibilityLabel("녹음 종료")
+                .accessibilityHint("녹음을 저장하고 마칩니다.")
+                .accessibilityIdentifier("recording.island.stop")
+            }
+        }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: true)
+    }
+}
+
+/// 다이내믹 아일랜드 아래: 시작 정보와 가로 한 줄 제어부
 struct LiveIslandExpandedBottom: View {
     let shown: LiveShown
     var title: String = ""
@@ -200,14 +235,16 @@ struct LiveIslandExpandedBottom: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 if !title.isEmpty {
-                    Text(title).font(.footnote).foregroundStyle(Color(white: 0.85)).lineLimit(1)
+                    Text(title).font(.caption).foregroundStyle(Color(white: 0.75))
+                        .lineLimit(1).minimumScaleFactor(0.85)
                 }
-                if !shown.canToggle {
+                if !shown.canStop {
                     Text(shown.label).font(.caption).foregroundStyle(Color(white: 0.6)).lineLimit(2)
                 }
             }
-            Spacer(minLength: 0)
-            if shown.canStop { LiveToggleButton(shown: shown, scheme: .dark) }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if shown.canStop { LiveIslandControls(shown: shown) }
         }
+        .frame(minHeight: 44)
     }
 }

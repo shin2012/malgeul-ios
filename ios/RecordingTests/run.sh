@@ -10,3 +10,4 @@ OUT="${TMPDIR:?}/malgeul-recording-tests"
 "$S" Malgeul/Core/RecordingLaunch.swift LaunchTests/main.swift -o "${OUT}-launch"
 "${OUT}-launch"
 python3 ci/check_background_contract.py
+python3 ci/check_island_layout.py

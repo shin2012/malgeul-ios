@@ -30,18 +30,21 @@ struct LivePreviewView: View {
                 VStack(spacing: 10) {
                     Text(scheme == .dark ? "다크 모드" : "주간 모드").font(.headline).foregroundStyle(.white)
                     // 다이내믹 아일랜드 펼침 (실제 여백 16 + 칸 여백과 같게)
-                    ForEach([LiveShown.recording(.now - 754, 754), .paused(1830), .unknown], id: \.shortLabel) { sh in
+                    ForEach([LiveShown.recording(.now - 754, 754), .paused(37265), .unknown], id: \.shortLabel) { sh in
                         VStack(spacing: 0) {
-                            HStack(alignment: .top) {
-                                LiveIslandLeading(shown: sh).padding(.leading, 6).padding(.top, 6).frame(height: 48)
+                            HStack(alignment: .center) {
+                                LiveIslandLeading(shown: sh).padding(.leading, 6).padding(.top, 6)
                                 Spacer()
                                 LiveTimeText(shown: sh).font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
-                                    .frame(maxWidth: 110, alignment: .trailing).padding(.trailing, 6).padding(.top, 6)
+                                    .lineLimit(1).minimumScaleFactor(0.7)
+                                    .frame(maxWidth: 110, alignment: .trailing).frame(height: 40)
+                                    .padding(.trailing, 6).padding(.top, 6)
                             }
                             LiveIslandExpandedBottom(shown: sh, title: "11월 11일 14:05 시작")
-                                .padding(.horizontal, 6).padding(.top, 10).padding(.bottom, 4)
+                                .padding(.horizontal, 6).padding(.top, 8)
                         }
                         .padding(16)
+                        .frame(maxWidth: 373)
                         .background(RoundedRectangle(cornerRadius: 44, style: .continuous).fill(.black))
                     }
                     .environment(\.colorScheme, .dark)

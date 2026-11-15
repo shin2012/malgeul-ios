@@ -37,12 +37,13 @@ struct RecordingLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.trailing) {
                     LiveTimeText(shown: shown).font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.7)
-                        .frame(maxWidth: 110, maxHeight: .infinity, alignment: .trailing)
+                        .frame(maxWidth: 110, alignment: .trailing)
+                        .frame(height: 40)
                         .padding(.trailing, 6).padding(.top, 6)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     LiveIslandExpandedBottom(shown: shown, title: context.attributes.title)
-                        .padding(.horizontal, 6).padding(.top, 10).padding(.bottom, 4)
+                        .padding(.horizontal, 6).padding(.top, 8)
                 }
             } compactLeading: {
                 Image(systemName: shown.symbol).foregroundStyle(c)
