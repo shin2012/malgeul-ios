@@ -179,11 +179,14 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let granted = await AVAudioApplication.requestRecordPermission()
         guard granted else { permissionDenied = true; return }
         permissionDenied = false
+        var stage = "오디오 설정"
         do {
             let s = AVAudioSession.sharedInstance()
             // 블루투스 이어폰 마이크(HFP)는 음질이 낮아 회의 녹음엔 기기 내장 마이크를 씀
             try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            stage = "오디오 세션 활성화"
             try s.setActive(true)
+            stage = "녹음 파일 시작"
 
             startedAt = .now
             let f = DateFormatter()
@@ -215,7 +218,10 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
             tf.dateFormat = "M월 d일 HH:mm 시작"
             LiveRecording.shared.start(title: tf.string(from: startedAt), startedAt: startedAt)
         } catch {
-            lastError = error.localizedDescription
+            let detail = error as NSError
+            lastError = "녹음 시작 실패 [\(stage)] (\(detail.domain):\(detail.code), 앱 상태 \(UIApplication.shared.applicationState.rawValue)): \(detail.localizedDescription)"
+            UserDefaults.standard.set(lastError, forKey: "lastRecordingStartError")
+            print("[RecordingStart] \(lastError ?? "")")
             try? AVAudioSession.sharedInstance().setActive(false)
         }
     }
