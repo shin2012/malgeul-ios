@@ -48,7 +48,10 @@ struct RecordingLiveActivity: Widget {
             } compactLeading: {
                 Image(systemName: shown.symbol).foregroundStyle(c)
             } compactTrailing: {
-                LiveTimeText(shown: shown).frame(maxWidth: 52).foregroundStyle(c)
+                LiveTimeText(shown: shown)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .frame(maxWidth: 52).foregroundStyle(c)
             } minimal: {
                 Image(systemName: shown.symbol).foregroundStyle(c)
             }

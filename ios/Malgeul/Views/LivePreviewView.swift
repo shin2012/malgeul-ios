@@ -56,7 +56,10 @@ struct LivePreviewView: View {
                     }
                     HStack(spacing: 40) {
                         Image(systemName: "mic.fill").foregroundStyle(LiveColors.rec)
-                        LiveTimeText(shown: .recording(.now - 754, 754)).foregroundStyle(LiveColors.rec).frame(maxWidth: 52)
+                        LiveTimeText(shown: .recording(.now - 754, 754))
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(1).minimumScaleFactor(0.6)
+                            .foregroundStyle(LiveColors.rec).frame(maxWidth: 52)
                     }
                     .font(.footnote.weight(.semibold))
                     .padding(.horizontal, 18).padding(.vertical, 8)

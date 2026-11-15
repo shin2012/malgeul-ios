@@ -14,5 +14,7 @@ bottom = views.split('struct LiveIslandExpandedBottom:', 1)[1]
 assert 'LiveIslandControls(shown: shown)' in bottom
 assert 'LiveToggleButton(' not in bottom, '잠금 화면의 세로 버튼을 아일랜드에서 재사용하면 안 됨'
 assert 'maxHeight: .infinity' not in widget, '확장 영역이 무제한 높이를 요구하면 안 됨'
+compact = widget.split('compactTrailing: {', 1)[1].split('} minimal:', 1)[0]
+assert '.lineLimit(1)' in compact and '.minimumScaleFactor(' in compact, '작은 아일랜드 시간은 큰 글씨에서도 한 줄 유지'
 assert 'if shown.canStop { LiveToggleButton(shown: shown, scheme: scheme) }' in views, '잠금 화면 제어부는 유지'
 print('PASS 아일랜드 가로 제어부·44pt 터치·접근성·높이 계약, 잠금 화면 제어부 유지')
