@@ -78,8 +78,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             LiveRecordingActions.handler = { cmd in
                 switch cmd {
                 case .togglePause: Recorder.shared.togglePause()
+                case .stop: Recorder.shared.stop()
                 }
             }
+            InterruptionNotificationManager.shared.install()
+            Recorder.shared.recoverUnfinishedRecording()
             LiveRecording.shared.cleanUpLeftovers(recording: Recorder.shared.isActive)
         }
         return true
@@ -117,6 +120,14 @@ struct MalgeulApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                #if DEBUG
+                .task {
+                    if UserDefaults.standard.bool(forKey: "recordingSelfTest") {
+                        try? await Task.sleep(for: .seconds(2))
+                        await RecordingSelfTest.run()
+                    }
+                }
+                #endif
                 .environmentObject(config)
                 .environmentObject(router)
                 .environmentObject(store)

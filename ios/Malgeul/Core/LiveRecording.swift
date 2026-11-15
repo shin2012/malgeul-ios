@@ -9,6 +9,7 @@ final class LiveRecording {
     static let shared = LiveRecording()
 
     private var activity: Activity<RecordingActivityAttributes>?
+    var isVisible: Bool { activity != nil }
     private var lastPush = Date.distantPast
     private var lastPhase: RecordingActivityAttributes.ContentState.Phase?
     private static let staleAfter: TimeInterval = 120
@@ -65,12 +66,7 @@ final class LiveRecording {
         guard let activity else { return }
         self.activity = nil
         let c = ActivityContent(state: content(.stopped, elapsed: elapsed), staleDate: nil)
-        let sem = DispatchSemaphore(value: 0)
-        Task.detached {
-            await activity.end(c, dismissalPolicy: .after(.now + 15 * 60))
-            sem.signal()
-        }
-        _ = sem.wait(timeout: .now() + 1.5)
+        Task { await activity.end(c, dismissalPolicy: .after(.now + 15 * 60)) }
     }
 
     private func content(_ phase: RecordingActivityAttributes.ContentState.Phase, elapsed: TimeInterval) -> RecordingActivityAttributes.ContentState {

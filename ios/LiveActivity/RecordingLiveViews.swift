@@ -70,6 +70,13 @@ enum LiveShown {
         }
     }
 
+    var canStop: Bool {
+        switch self {
+        case .recording, .paused, .interrupted: true
+        default: false
+        }
+    }
+
     var isPaused: Bool { if case .paused = self { return true } else { return false } }
 }
 
@@ -98,18 +105,35 @@ struct LiveToggleButton: View {
     let shown: LiveShown
     let scheme: ColorScheme
     var body: some View {
-        Button(intent: ToggleRecordingPauseIntent()) {
-            HStack(spacing: 5) {
-                Image(systemName: shown.isPaused ? "record.circle" : "pause.fill")
-                Text(shown.isPaused ? "계속" : "일시정지")
+        VStack(spacing: 6) {
+            if shown.canToggle {
+            Button(intent: ToggleRecordingPauseIntent()) {
+                HStack(spacing: 5) {
+                    Image(systemName: shown.isPaused ? "record.circle" : "pause.fill")
+                    Text(shown.isPaused ? "계속" : "일시정지")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Capsule().fill(shown.isPaused ? LiveColors.rec : LiveColors.accent(scheme)))
             }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(Capsule().fill(shown.isPaused ? LiveColors.rec : LiveColors.accent(scheme)))
+            .buttonStyle(.plain)
+            }
+
+            Button(intent: StopRecordingIntent()) {
+                HStack(spacing: 5) {
+                    Image(systemName: "stop.fill")
+                    Text("종료")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Capsule().fill(Color(white: 0.3)))
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -137,7 +161,7 @@ struct LiveLockScreenView: View {
                 Text("말글 · \(title)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
-            if shown.canToggle { LiveToggleButton(shown: shown, scheme: scheme) }
+            if shown.canStop { LiveToggleButton(shown: shown, scheme: scheme) }
         }
         .padding(16)
     }
@@ -183,7 +207,7 @@ struct LiveIslandExpandedBottom: View {
                 }
             }
             Spacer(minLength: 0)
-            if shown.canToggle { LiveToggleButton(shown: shown, scheme: .dark) }
+            if shown.canStop { LiveToggleButton(shown: shown, scheme: .dark) }
         }
     }
 }

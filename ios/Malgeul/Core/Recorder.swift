@@ -140,7 +140,7 @@ final class RecordingStore: ObservableObject {
 
 /// 회의 녹음기. 화면이 꺼지거나 다른 앱으로 가도 계속 녹음(백그라운드 오디오), 전화 등 끼어들기 후 자동 이어 녹음.
 @MainActor
-final class Recorder: NSObject, ObservableObject {
+final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     static let shared = Recorder()
 
     enum State { case idle, recording, paused }
@@ -158,6 +158,9 @@ final class Recorder: NSObject, ObservableObject {
     private var timer: Timer?
     private var startedAt = Date()
     private var fileName = ""
+    private var starting = false
+    private var safety = RecordingSafety()
+    private static let journalKey = "unfinishedRecording"
 
     var isActive: Bool { state != .idle }
 
@@ -168,7 +171,11 @@ final class Recorder: NSObject, ObservableObject {
     }
 
     func start() async {
-        guard state == .idle else { return }
+        guard state == .idle, !starting else { return }
+        starting = true
+        defer { starting = false }
+        lastError = nil
+        await InterruptionNotificationManager.shared.requestPermission()
         let granted = await AVAudioApplication.requestRecordPermission()
         guard granted else { permissionDenied = true; return }
         permissionDenied = false
@@ -182,7 +189,7 @@ final class Recorder: NSObject, ObservableObject {
             let f = DateFormatter()
             f.locale = Locale(identifier: "ko_KR")
             f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-            fileName = "녹음 \(f.string(from: startedAt)).m4a"
+            fileName = "녹음 \(f.string(from: startedAt))-\(UUID().uuidString.prefix(8)).m4a"
             let url = RecordingStore.folder.appending(path: fileName)
             // 음성 회의용: AAC 모노 24kHz 48kbps (1시간 ≈ 21MB). 서버가 어차피 16kHz로 다시 압축함.
             let settings: [String: Any] = [
@@ -193,12 +200,15 @@ final class Recorder: NSObject, ObservableObject {
                 AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
             ]
             let r = try AVAudioRecorder(url: url, settings: settings)
+            r.delegate = self
             r.isMeteringEnabled = true
             guard r.record() else { throw NSError(domain: "malgeul", code: 1, userInfo: [NSLocalizedDescriptionKey: "녹음을 시작할 수 없습니다"]) }
             recorder = r
             elapsed = 0
             levels = Array(repeating: 0, count: levels.count)
             state = .recording
+            safety.begin()
+            UserDefaults.standard.set(fileName, forKey: Self.journalKey)
             startTimer()
             let tf = DateFormatter()
             tf.locale = Locale(identifier: "ko_KR")
@@ -214,6 +224,8 @@ final class Recorder: NSObject, ObservableObject {
         guard state == .recording else { return }
         recorder?.pause()
         state = .paused
+        interrupted = false
+        safety.pause()
         LiveRecording.shared.update(.paused, elapsed: currentElapsed)
     }
 
@@ -241,25 +253,30 @@ final class Recorder: NSObject, ObservableObject {
 
     func resume() {
         guard state == .paused, let r = recorder else { return }
-        try? AVAudioSession.sharedInstance().setActive(true)
-        if r.record() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            guard r.record() else { throw RecordingIntentError.failed("녹음을 이어갈 수 없습니다.") }
             state = .recording
             interrupted = false
+            safety.resume()
             LiveRecording.shared.update(.recording, elapsed: currentElapsed)
-        }
+        } catch { handleFailure(reason: "녹음 재개 실패: \(error.localizedDescription)") }
     }
 
     /// 녹음 끝내기 → 녹음 목록에 추가하고 완료 시트에 넘김
-    func stop() {
+    func stop(unexpected: Bool = false) {
         guard let r = recorder else { return }
         let dur = r.currentTime > 0 ? r.currentTime : elapsed
+        safety.stop()
+        r.delegate = nil
         r.stop()
         recorder = nil
+        UserDefaults.standard.removeObject(forKey: Self.journalKey)
         timer?.invalidate()
         timer = nil
         state = .idle
         interrupted = false
-        LiveRecording.shared.end()
+        if unexpected { LiveRecording.shared.endAsStopped(elapsed: dur) } else { LiveRecording.shared.end() }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         let f = DateFormatter()
         f.locale = Locale(identifier: "ko_KR")
@@ -272,8 +289,11 @@ final class Recorder: NSObject, ObservableObject {
     /// 녹음 버리기 (파일 삭제)
     func discard() {
         guard let r = recorder else { return }
+        safety.stop()
+        r.delegate = nil
         r.stop()
         r.deleteRecording()
+        UserDefaults.standard.removeObject(forKey: Self.journalKey)
         recorder = nil
         timer?.invalidate()
         timer = nil
@@ -282,6 +302,10 @@ final class Recorder: NSObject, ObservableObject {
         LiveRecording.shared.end()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
+
+    #if DEBUG
+    func debugStopUnderlyingRecorder() { recorder?.stop() }
+    #endif
 
     private func startTimer() {
         timer?.invalidate()
@@ -297,7 +321,12 @@ final class Recorder: NSObject, ObservableObject {
         elapsed = r.currentTime > 0 ? r.currentTime : elapsed
         // 잠금 화면 표시: 실제로 녹음이 이어지는지 확인해 주기적으로 갱신
         switch state {
-        case .recording: LiveRecording.shared.update(r.isRecording ? .recording : .stopped, elapsed: elapsed)
+        case .recording:
+            guard r.isRecording else {
+                handleFailure(reason: "녹음이 예기치 않게 멈췄습니다. 저장된 녹음을 확인해 주세요.")
+                return
+            }
+            LiveRecording.shared.update(.recording, elapsed: elapsed)
         case .paused: LiveRecording.shared.update(interrupted ? .interrupted : .paused, elapsed: elapsed)
         case .idle: break
         }
@@ -309,6 +338,37 @@ final class Recorder: NSObject, ObservableObject {
         levels.append(level)
     }
 
+    /// 파일을 먼저 마무리하고 목록에 보존한다. 같은 종료에 대한 콜백은 무시한다.
+    func handleFailure(reason: String) {
+        guard recorder != nil, safety.fail() else { return }
+        lastError = reason
+        InterruptionNotificationManager.shared.notifyInterruption(reason: reason)
+        stop(unexpected: true)
+    }
+
+    func recoverUnfinishedRecording() {
+        guard !isActive, UserDefaults.standard.string(forKey: Self.journalKey) != nil else { return }
+        RecordingStore.shared.reload()
+        UserDefaults.standard.removeObject(forKey: Self.journalKey)
+        lastError = "지난 녹음이 정상 종료되지 않았습니다. 내 녹음에서 복구된 파일을 확인해 주세요."
+        InterruptionNotificationManager.shared.notifyInterruption(reason: lastError!)
+    }
+
+    nonisolated func audioRecorderDidFinishRecording(_ source: AVAudioRecorder, successfully flag: Bool) {
+        Task { @MainActor in
+            guard self.recorder === source else { return }
+            self.handleFailure(reason: flag ? "녹음이 예기치 않게 끝났습니다. 파일을 저장했습니다." : "녹음을 마치지 못했습니다. 저장된 파일을 확인해 주세요.")
+        }
+    }
+
+    nonisolated func audioRecorderEncodeErrorDidOccur(_ source: AVAudioRecorder, error: Error?) {
+        let message = error?.localizedDescription ?? "알 수 없는 인코더 오류"
+        Task { @MainActor in
+            guard self.recorder === source else { return }
+            self.handleFailure(reason: "녹음 오류: \(message)")
+        }
+    }
+
     @objc private nonisolated func onInterruption(_ n: Notification) {
         guard let info = n.userInfo, let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
@@ -317,8 +377,12 @@ final class Recorder: NSObject, ObservableObject {
             switch type {
             case .began:
                 if self.state == .recording {
+                    self.recorder?.pause()
                     self.state = .paused
                     self.interrupted = true
+                    if self.safety.interrupt() {
+                        InterruptionNotificationManager.shared.notifyInterruption(reason: "전화 또는 다른 오디오 사용으로 녹음이 잠시 중단됐습니다. 재개 여부를 확인해 주세요.")
+                    }
                     LiveRecording.shared.update(.interrupted, elapsed: self.currentElapsed)
                 }
             case .ended:

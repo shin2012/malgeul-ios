@@ -29,14 +29,25 @@ jobs:
             echo "패키지 받기 실패 $i — 다시 시도"; tail -25 resolve.log; sleep 20
           done
           exit 1
+      - name: 녹음 정책 시험
+        run: bash ios/RecordingTests/run.sh
       - name: 빌드 (시뮬레이터, 서명 없음)
         working-directory: ios
         run: |
           set -o pipefail
           xcodebuild -project Malgeul.xcodeproj -scheme Malgeul -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
-            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/derived" \
             CODE_SIGNING_ALLOWED=NO -IDEBuildingContinueBuildingAfterErrors=YES build 2>&1 | tee build.log | grep -E "error:|warning:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build.log
+      - name: 녹음 인텐트·파일 저장 실제 실행
+        run: python3 ios/ci/recording_test.py "$RUNNER_TEMP/derived/Build/Products/Debug-iphonesimulator/Malgeul.app" "$RUNNER_TEMP/verification"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recording-verification
+          path: |
+            ${{ runner.temp }}/verification
+            ios/build.log
 
   testflight:
     needs: build
@@ -124,7 +135,7 @@ jobs:
           xcodebuild -project Malgeul.xcodeproj -scheme Malgeul -configuration Release -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
             -destination 'generic/platform=iOS' -archivePath $RUNNER_TEMP/App.xcarchive \
             DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Automatic \
-            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} INFOPLIST_KEY_MGSourceRevision="$GITHUB_SHA" \
             MG_SERVER_URL="$MG_SERVER_URL" \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
@@ -156,3 +167,12 @@ jobs:
         run: |
           xcrun altool --upload-app -t ios -f "$(ls $RUNNER_TEMP/export/*.ipa | head -1)" \
             --apiKey $ASC_KEY_ID --apiIssuer $ASC_ISSUER_ID --show-progress
+      - name: TestFlight 처리·내부 그룹 읽기 검증
+        run: python3 ios/ci/verify_testflight.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: testflight-verification
+          path: |
+            ${{ runner.temp }}/verification
+            ios/archive.log
