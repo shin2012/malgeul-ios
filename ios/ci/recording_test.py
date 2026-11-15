@@ -13,7 +13,8 @@ out.mkdir(parents=True, exist_ok=True)
 bundle = 'kr.b-612.malgeul'
 
 def sim(*args):
-    p = subprocess.run(['xcrun', 'simctl', *args], check=True, text=True, capture_output=True, timeout=120)
+    p = subprocess.run(['xcrun', 'simctl', *args], check=True, text=True, capture_output=True,
+                       timeout=600 if args[0] == 'bootstatus' else 120)
     return p.stdout.strip()
 
 devices = json.loads(sim('list', 'devices', 'available', '-j'))['devices']
