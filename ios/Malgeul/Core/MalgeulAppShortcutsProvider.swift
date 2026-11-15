@@ -49,7 +49,6 @@ struct ToggleRecordingIntent: AudioRecordingIntent, LiveActivityIntent {
                     }
                 },
                 activateRecording: {
-                    Router.shared.tab = .record
                     await recorder.start()
                 })
             guard recorder.isActive else {
