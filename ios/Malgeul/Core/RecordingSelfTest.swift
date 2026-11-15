@@ -23,6 +23,7 @@ enum RecordingSelfTest {
                 try await Task.sleep(for: .seconds(1.2))
                 check(r.state == .recording && r.elapsed > 0, "토글 인텐트 실제 녹음 시작")
                 check(LiveRecording.shared.isVisible, "녹음 라이브 액티비티 생성")
+                check(AVAudioSession.sharedInstance().categoryOptions.contains(.mixWithOthers), "다른 앱 오디오를 중단하지 않는 혼합 세션")
                 _ = try await ToggleRecordingPauseIntent().perform()
                 check(r.state == .paused, "잠금 화면 일시정지 인텐트")
                 _ = try await ToggleRecordingIntent().perform()

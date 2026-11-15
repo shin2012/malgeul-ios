@@ -170,59 +170,75 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
                                                name: AVAudioSession.interruptionNotification, object: nil)
     }
 
-    func start() async {
+    func start(requiresLiveActivity: Bool = false) async {
         guard state == .idle, !starting else { return }
         starting = true
         defer { starting = false }
         lastError = nil
-        await InterruptionNotificationManager.shared.requestPermission()
-        let granted = await AVAudioApplication.requestRecordPermission()
-        guard granted else { permissionDenied = true; return }
+        if requiresLiveActivity {
+            // 잠금 화면 실행에서는 권한 창이나 앱 열기를 시도하지 않는다.
+            guard AVAudioApplication.shared.recordPermission == .granted else {
+                permissionDenied = true
+                return
+            }
+        } else {
+            await InterruptionNotificationManager.shared.requestPermission()
+            let granted = await AVAudioApplication.requestRecordPermission()
+            guard granted else { permissionDenied = true; return }
+        }
         permissionDenied = false
-        var stage = "오디오 설정"
+        var stage = "녹음 표시 생성"
+        let session = AVAudioSession.sharedInstance()
+        startedAt = .now
+        let titleFormat = DateFormatter()
+        titleFormat.locale = Locale(identifier: "ko_KR")
+        titleFormat.dateFormat = "M월 d일 HH:mm 시작"
         do {
-            let s = AVAudioSession.sharedInstance()
-            // 블루투스 이어폰 마이크(HFP)는 음질이 낮아 회의 녹음엔 기기 내장 마이크를 씀
-            try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
-            stage = "오디오 세션 활성화"
-            try s.setActive(true)
-            stage = "녹음 파일 시작"
-
-            startedAt = .now
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "ko_KR")
-            f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-            fileName = "녹음 \(f.string(from: startedAt))-\(UUID().uuidString.prefix(8)).m4a"
-            let url = RecordingStore.folder.appending(path: fileName)
-            // 음성 회의용: AAC 모노 24kHz 48kbps (1시간 ≈ 21MB). 서버가 어차피 16kHz로 다시 압축함.
-            let settings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 24_000,
-                AVNumberOfChannelsKey: 1,
-                AVEncoderBitRateKey: 48_000,
-                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
-            ]
-            let r = try AVAudioRecorder(url: url, settings: settings)
-            r.delegate = self
-            r.isMeteringEnabled = true
-            guard r.record() else { throw NSError(domain: "malgeul", code: 1, userInfo: [NSLocalizedDescriptionKey: "녹음을 시작할 수 없습니다"]) }
-            recorder = r
-            elapsed = 0
-            levels = Array(repeating: 0, count: levels.count)
-            state = .recording
-            safety.begin()
-            UserDefaults.standard.set(fileName, forKey: Self.journalKey)
-            startTimer()
-            let tf = DateFormatter()
-            tf.locale = Locale(identifier: "ko_KR")
-            tf.dateFormat = "M월 d일 HH:mm 시작"
-            LiveRecording.shared.start(title: tf.string(from: startedAt), startedAt: startedAt)
+            try RecordingLaunch.start(requiresActivity: requiresLiveActivity, prepareActivity: {
+                LiveRecording.shared.start(title: titleFormat.string(from: startedAt), startedAt: startedAt)
+                if let error = LiveRecording.shared.lastStartError { stage += " (\(error))" }
+                return LiveRecording.shared.isVisible
+            }, activateRecording: {
+                stage = "오디오 설정"
+                // 백그라운드에서 다른 앱 오디오를 끊으려 하지 않는다. 무음 재생·상시 마이크 점유는 하지 않음.
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers])
+                // AVAudioRecorder가 준비·녹음할 때 세션을 활성화한다. 단축어에서 수동 활성화를 선행하지 않는다.
+                stage = "녹음 파일 준비"
+                let f = DateFormatter()
+                f.locale = Locale(identifier: "ko_KR")
+                f.dateFormat = "yyyy-MM-dd HH.mm.ss"
+                fileName = "녹음 \(f.string(from: startedAt))-\(UUID().uuidString.prefix(8)).m4a"
+                let url = RecordingStore.folder.appending(path: fileName)
+                let settings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: 24_000,
+                    AVNumberOfChannelsKey: 1,
+                    AVEncoderBitRateKey: 48_000,
+                    AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+                ]
+                let r = try AVAudioRecorder(url: url, settings: settings)
+                r.delegate = self
+                r.isMeteringEnabled = true
+                guard r.prepareToRecord() else { throw RecordingIntentError.failed("녹음 파일을 준비하지 못했습니다.") }
+                stage = "마이크 녹음 시작"
+                guard r.record() else { throw RecordingIntentError.failed("녹음을 시작할 수 없습니다.") }
+                recorder = r
+                elapsed = 0
+                levels = Array(repeating: 0, count: levels.count)
+                state = .recording
+                safety.begin()
+                UserDefaults.standard.set(fileName, forKey: Self.journalKey)
+                startTimer()
+                print("[RecordingStart] active appState=\(UIApplication.shared.applicationState.rawValue) live=\(LiveRecording.shared.isVisible) mix=\(session.categoryOptions.contains(.mixWithOthers))")
+            }, cleanup: {
+                LiveRecording.shared.end()
+                try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            })
         } catch {
             let detail = error as NSError
             lastError = "녹음 시작 실패 [\(stage)] (\(detail.domain):\(detail.code), 앱 상태 \(UIApplication.shared.applicationState.rawValue)): \(detail.localizedDescription)"
             UserDefaults.standard.set(lastError, forKey: "lastRecordingStartError")
             print("[RecordingStart] \(lastError ?? "")")
-            try? AVAudioSession.sharedInstance().setActive(false)
         }
     }
 

@@ -9,45 +9,43 @@ func run() async -> Int32 {
         if !condition { failed += 1 }
         print("\(condition ? "PASS" : "FAIL") \(message)")
     }
-    enum TestError: Error { case cancelled, notActive }
-
-    // 실제 오류를 재현하는 경계: 전경 활성화 전에 오디오를 시작하면 세션이 거부된다.
-    var foreground = false
+    enum TestError: Error { case activationFailed }
     var events: [String] = []
+    var visible = false
     do {
-        try await RecordingLaunch.start(isForeground: { foreground }, requestForeground: {
-            events.append("request")
-        }, waitForForeground: {
-            events.append("active")
-            foreground = true
+        try RecordingLaunch.start(requiresActivity: true, prepareActivity: {
+            events.append("activity")
+            visible = true
+            return visible
         }, activateRecording: {
-            guard foreground else { throw NSError(domain: "NSOSStatusErrorDomain", code: 560557684,
-                userInfo: [NSLocalizedDescriptionKey: "Session activation failed"]) }
+            guard visible else { throw TestError.activationFailed }
             events.append("record")
-        })
-        check(events == ["request", "active", "record"], "잠금 화면·홈 화면 실행: 전경 요청 → 활성화 확인 → 녹음")
-    } catch { check(false, "백그라운드 시작 실패: \(error.localizedDescription)") }
+        }, cleanup: { events.append("cleanup") })
+        check(events == ["activity", "record"], "녹음 표시 생성 후 오디오 활성화, 전경 전환 단계 없음")
+    } catch { check(false, "정상 시작 경계 실패") }
 
     events = []
     do {
-        try await RecordingLaunch.start(isForeground: { true }, requestForeground: { events.append("unexpected") },
-            waitForForeground: { events.append("unexpected") }, activateRecording: { events.append("record") })
-        check(events == ["record"], "이미 앱이 전경이면 추가 전환 없이 시작")
-    } catch { check(false, "전경 실행 오류") }
+        try RecordingLaunch.start(requiresActivity: true, prepareActivity: { false },
+            activateRecording: { events.append("unexpected") }, cleanup: { events.append("cleanup") })
+        check(false, "표시 생성 실패를 전달해야 함")
+    } catch { check(events == ["cleanup"], "단축어 표시 생성 실패 시 마이크를 켜지 않고 정리") }
 
-    var activated = false
+    events = []
     do {
-        try await RecordingLaunch.start(isForeground: { false }, requestForeground: { throw TestError.cancelled },
-            waitForForeground: {}, activateRecording: { activated = true })
-        check(false, "사용자 전경 전환 취소를 전달해야 함")
-    } catch { check(!activated, "잠금 해제·전경 전환 취소 시 녹음하지 않음") }
+        try RecordingLaunch.start(requiresActivity: false, prepareActivity: { false },
+            activateRecording: { events.append("record") }, cleanup: { events.append("cleanup") })
+        check(events == ["record"], "앱 안의 녹음은 표시 권한 없이도 기존대로 시작")
+    } catch { check(false, "앱 내 녹음 회귀") }
 
-    activated = false
+    events = []
     do {
-        try await RecordingLaunch.start(isForeground: { false }, requestForeground: {},
-            waitForForeground: { throw TestError.notActive }, activateRecording: { activated = true })
-        check(false, "전경 활성화 실패를 전달해야 함")
-    } catch { check(!activated, "앱이 활성화되지 않으면 오디오 세션에 접근하지 않음") }
+        try RecordingLaunch.start(requiresActivity: true, prepareActivity: { events.append("activity"); return true },
+            activateRecording: { throw TestError.activationFailed }, cleanup: { events.append("cleanup") })
+        check(false, "세션 실패를 전달해야 함")
+    } catch TestError.activationFailed {
+        check(events == ["activity", "cleanup"], "세션 실패 시 표시·세션 정리, 앱 열기 우회 없음")
+    } catch { check(false, "원래 세션 오류 보존 실패") }
 
     print("LAUNCH_CHECKS=\(count) FAILURES=\(failed)")
     return failed == 0 ? 0 : 1

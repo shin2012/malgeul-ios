@@ -10,6 +10,7 @@ final class LiveRecording {
 
     private var activity: Activity<RecordingActivityAttributes>?
     var isVisible: Bool { activity != nil }
+    private(set) var lastStartError: String?
     private var lastPush = Date.distantPast
     private var lastPhase: RecordingActivityAttributes.ContentState.Phase?
     private static let staleAfter: TimeInterval = 120
@@ -26,7 +27,11 @@ final class LiveRecording {
     }
 
     func start(title: String, startedAt: Date, elapsed: TimeInterval = 0) {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        lastStartError = nil
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            lastStartError = "라이브 액티비티가 허용되지 않았습니다."
+            return
+        }
         activity = nil
         cleanUpLeftovers(recording: false)
         let state = content(.recording, elapsed: elapsed)
@@ -36,6 +41,8 @@ final class LiveRecording {
             lastPush = .now
             lastPhase = .recording
         } catch {
+            let detail = error as NSError
+            lastStartError = "\(detail.domain):\(detail.code) \(detail.localizedDescription)"
             activity = nil
         }
     }
