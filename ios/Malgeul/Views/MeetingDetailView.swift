@@ -30,7 +30,7 @@ struct MeetingDetailView: View {
     @State private var renamingTitle = false
     @State private var titleText = ""
     @State private var editingDate: Meeting?
-    @State private var confirmDelete = false
+    @State private var deletion = TwoTapDeletion()
     @State private var confirmRedo = false
     @State private var shareURL: URL?
     @State private var toast: String?
@@ -62,6 +62,15 @@ struct MeetingDetailView: View {
 
     var body: some View {
         dialogs2(dialogs1(content))
+            .safeAreaInset(edge: .bottom) {
+                if deletion.isArmed("detail-\(meetingID)") {
+                    TwoTapDeleteButton(target: "detail-\(meetingID)", confirmation: $deletion) {
+                        Task { await deleteMeeting() }
+                    }
+                    .padding(12).frame(maxWidth: .infinity).background(Color.white)
+                }
+            }
+            .onDisappear { deletion.reset() }
     }
 
     @ViewBuilder private var content: some View {
@@ -320,7 +329,9 @@ struct MeetingDetailView: View {
                 showToast("기기에서 화자를 다시 추정합니다")
             } label: { Label("기기 목소리로 화자 다시 추정", systemImage: "person.wave.2") }
             Divider()
-            Button(role: .destructive) { confirmDelete = true } label: { Label("삭제", systemImage: "trash") }
+            Button {
+                if deletion.tap("detail-\(meetingID)") { Task { await deleteMeeting() } }
+            } label: { Label("삭제", systemImage: "trash") }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -340,9 +351,6 @@ struct MeetingDetailView: View {
                 Button("저장") { saveTitle() }
                 Button("취소", role: .cancel) {}
             }
-            .confirmationDialog("이 노트를 삭제할까요?", isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button("삭제", role: .destructive) { Task { await deleteMeeting() } }
-            } message: { Text("녹음 파일·대화·회의록이 모두 지워지고 되돌릴 수 없습니다.") }
             .confirmationDialog("이 기기에서 다시 받아쓸까요?", isPresented: $confirmRedo, titleVisibility: .visible) {
                 Button("다시 받아쓰기") {
                     device.requestNotificationPermission()

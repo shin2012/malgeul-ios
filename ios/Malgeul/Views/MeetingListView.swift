@@ -26,6 +26,7 @@ struct MeetingsSplitView: View {
 
 struct MeetingListView: View {
     @EnvironmentObject private var config: AppConfig
+    @EnvironmentObject private var recordings: RecordingStore
     @EnvironmentObject private var store: MeetingStore
     @EnvironmentObject private var router: Router
     @EnvironmentObject private var uploads: UploadCenter
@@ -36,7 +37,7 @@ struct MeetingListView: View {
     @State private var filter: ListFilter = .all
     @State private var selecting = false
     @State private var multi = Set<Int>()
-    @State private var confirmDelete = false
+    @State private var deletion = TwoTapDeletion()
     @State private var deleting = false
     @State private var importing = false
     @State private var askTranscribe: Meeting?
@@ -44,7 +45,6 @@ struct MeetingListView: View {
     @State private var renaming: Meeting?
     @State private var renameText = ""
     @State private var editingDate: Meeting?
-    @State private var deleteOne: Meeting?
     @State private var errorText: String?
 
 
@@ -81,7 +81,7 @@ struct MeetingListView: View {
     }
 
     @ViewBuilder private var state: some View {
-        if !config.isConfigured {
+        if !config.isConfigured && localRecordings.isEmpty {
             ContentUnavailableView {
                 Label("로그인 필요", systemImage: "person.crop.circle")
             } description: {
@@ -90,7 +90,7 @@ struct MeetingListView: View {
                 Button("로그인") { router.showLogin = true }
                     .buttonStyle(.borderedProminent)
             }
-        } else if !store.loaded {
+        } else if !store.loaded && localRecordings.isEmpty {
             ProgressView("불러오는 중...")
         } else {
             list
@@ -103,6 +103,10 @@ struct MeetingListView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(Color.white, for: .navigationBar)
             .toolbar { toolbar }
+            .onChange(of: multi) { _, _ in deletion.reset() }
+            .onChange(of: filter) { _, _ in deletion.reset() }
+            .onChange(of: selecting) { _, _ in deletion.reset() }
+            .onDisappear { deletion.reset() }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio, .movie, .mpeg4Movie, .mpeg4Audio],
                           allowsMultipleSelection: true) { result in
                 if case .success(let urls) = result { urls.forEach { uploads.enqueueImported($0) } }
@@ -137,13 +141,6 @@ struct MeetingListView: View {
 
     private func dialogs2<V: View>(_ v: V) -> some View {
         v
-            .confirmationDialog("이 회의를 삭제할까요?", isPresented: Binding(get: { deleteOne != nil }, set: { if !$0 { deleteOne = nil } }),
-                                titleVisibility: .visible, presenting: deleteOne) { (m: Meeting) in
-                Button("삭제", role: .destructive) { Task { await delete([m.id]) } }
-            } message: { (m: Meeting) in Text(m.title) }
-            .confirmationDialog("선택한 \(multi.count)개를 삭제할까요?", isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button("\(multi.count)개 삭제", role: .destructive) { Task { await delete(multi) } }
-            }
             .alert("오류", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
                 Button("확인", role: .cancel) {}
             } message: { Text(errorText ?? "") }
@@ -170,7 +167,7 @@ struct MeetingListView: View {
                 .refreshable { await Task { await store.refresh() }.value }
                 .searchable(text: $search, prompt: "제목·태그 검색")
                 .overlay {
-                    if store.meetings.isEmpty && uploads.jobs.isEmpty {
+                    if store.meetings.isEmpty && uploads.jobs.isEmpty && localRecordings.isEmpty {
                         ContentUnavailableView {
                             Label("업로드된 회의가 없습니다", systemImage: "mic")
                         } description: {
@@ -179,7 +176,7 @@ struct MeetingListView: View {
                             Button("녹음하기") { startRecording() }.buttonStyle(.borderedProminent)
                             Button("파일 추가") { importing = true }
                         }
-                    } else if !search.isEmpty && filtered.isEmpty {
+                    } else if !search.isEmpty && filtered.isEmpty && localRecordings.isEmpty {
                         ContentUnavailableView.search(text: search)
                     }
                 }
@@ -195,6 +192,14 @@ struct MeetingListView: View {
         if !uploads.jobs.isEmpty && !selectable {
             Section("업로드") {
                 ForEach(uploads.jobs) { UploadJobRow(job: $0) }
+            }
+        }
+        if !selectable && !localRecordings.isEmpty {
+            Section("받아쓰기 전 · 이 기기의 녹음") {
+                ForEach(localRecordings) { r in
+                    PendingRecordingListRow(recording: r, deletion: $deletion)
+                        .listRowBackground(Color.white)
+                }
             }
         }
         let groups = monthGroups(filtered)
@@ -295,22 +300,27 @@ struct MeetingListView: View {
     }
 
     @ViewBuilder private func row(_ m: Meeting, selectable: Bool) -> some View {
-        let base = MeetingRow(meeting: m)
-        Group {
+        VStack(alignment: .leading, spacing: 4) {
             if selectable || m.isDone {
-                // 완료된 회의 → 선택하면 상세(스크립트)로 이동
-                base.tag(m.id)
+                MeetingRow(meeting: m)
             } else {
-                Button { tapUnfinished(m) } label: { base }
+                Button { tapUnfinished(m) } label: { MeetingRow(meeting: m) }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
             }
+            if deletion.isArmed("meeting-\(m.id)") {
+                TwoTapDeleteButton(target: "meeting-\(m.id)", confirmation: $deletion) {
+                    Task { await delete([m.id]) }
+                }
+                .padding(.bottom, 8)
+            }
         }
+        .tag(m.id)
         .listRowBackground(router.meetingID == m.id && !selectable ? Color.mgAccentWeak : Color.white)
         .listRowSeparatorTint(Color.mgLine)
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { deleteOne = m } label: { Label("삭제", systemImage: "trash") }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button { requestDelete(m) } label: { Label("삭제", systemImage: "trash") }.tint(Color.mgDanger)
             Button { beginRename(m) } label: { Label("제목", systemImage: "pencil") }.tint(.gray)
         }
         .swipeActions(edge: .leading) {
@@ -332,7 +342,7 @@ struct MeetingListView: View {
                 } label: { Label("그룹 옮기기", systemImage: "folder") }
             }
             Divider()
-            Button(role: .destructive) { deleteOne = m } label: { Label("삭제", systemImage: "trash") }
+            Button { requestDelete(m) } label: { Label("삭제", systemImage: "trash") }
         }
     }
 
@@ -390,13 +400,25 @@ struct MeetingListView: View {
                     Text("\(multi.count)개 선택").font(.system(size: 14)).foregroundStyle(Color.mgFg2)
                 }
                 ToolbarItem(placement: .bottomBar) {
-                    Button(role: .destructive) { confirmDelete = true } label: {
-                        Text(deleting ? "삭제 중…" : "삭제").foregroundStyle(Color.mgDanger)
+                    TwoTapDeleteButton(target: "multi-" + multi.sorted().map(String.init).joined(separator: ","), confirmation: $deletion,
+                                       title: deleting ? "삭제 중…" : "삭제") {
+                        let ids = multi
+                        Task { await delete(ids) }
                     }
                     .disabled(multi.isEmpty || deleting)
                 }
             }
         }
+    }
+
+    private var localRecordings: [Recording] {
+        guard filter == .all || filter == .pending else { return [] }
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return recordings.items.filter { $0.meetingID == nil && (q.isEmpty || $0.title.localizedCaseInsensitiveContains(q)) }
+    }
+
+    private func requestDelete(_ m: Meeting) {
+        if deletion.tap("meeting-\(m.id)") { Task { await delete([m.id]) } }
     }
 
     // MARK: 동작

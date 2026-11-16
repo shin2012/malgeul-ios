@@ -46,6 +46,17 @@ for kind in "iPhone" "iPad Pro"; do
   xcrun simctl status_bar "$UDID" override --time 9:41 --batteryLevel 100 --cellularBars 4 || true
   if [ "$kind" = "iPad Pro" ]; then xcrun simctl ui "$UDID" appearance dark || true; fi
   xcrun simctl install "$UDID" "$APP"
+  # 실제 기기 녹음 색인 경로에 중립적인 미업로드 예시를 넣는다.
+  DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
+  python3 - "$DATA" <<'PY'
+import json, pathlib, sys, wave
+root = pathlib.Path(sys.argv[1])
+folder = root / 'Documents' / '녹음'
+folder.mkdir(parents=True, exist_ok=True)
+with wave.open(str(folder / '받아쓰기 전 예시.wav'), 'wb') as w:
+    w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+    w.writeframes(b'\0\0' * 16000)
+PY
   first=1
   for s in "${SCREENS[@]}"; do
     # 잠금 화면 점검(live·real): 이름 끝이 dark면 다크 모드, 아니면 주간 모드

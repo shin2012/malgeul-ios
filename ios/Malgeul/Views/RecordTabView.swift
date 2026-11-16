@@ -12,15 +12,14 @@ struct RecordTabView: View {
     @EnvironmentObject private var player: AudioPlayer
     @EnvironmentObject private var device: OnDeviceJobCenter
 
-    @State private var confirmDiscard = false
     @State private var renaming: Recording?
     @State private var renameText = ""
-    @State private var deleting: Recording?
+    @State private var deletion = TwoTapDeletion()
 
     var body: some View {
         NavigationStack {
             List {
-                Section { RecorderPanel(confirmDiscard: $confirmDiscard) }
+                Section { RecorderPanel() }
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
 
@@ -32,9 +31,10 @@ struct RecordTabView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             RecordingRow(recording: r)
                             if let j = device.job(recording: r.id) { DeviceJobLine(job: j) }
+                            TwoTapDeleteButton(target: r.id, confirmation: $deletion) { deleteRecording(r) }
                         }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) { deleting = r } label: { Label("삭제", systemImage: "trash") }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button { requestDelete(r) } label: { Label("삭제", systemImage: "trash") }.tint(Color.mgDanger)
                                 Button { renameText = r.title; renaming = r } label: { Label("이름", systemImage: "pencil") }.tint(.gray)
                             }
                             .swipeActions(edge: .leading) {
@@ -65,7 +65,7 @@ struct RecordTabView: View {
                                 ShareLink(item: r.fileURL) { Label("공유", systemImage: "square.and.arrow.up") }
                                 Button { renameText = r.title; renaming = r } label: { Label("이름 변경", systemImage: "pencil") }
                                 Divider()
-                                Button(role: .destructive) { deleting = r } label: { Label("삭제", systemImage: "trash") }
+                                Button { requestDelete(r) } label: { Label("삭제", systemImage: "trash") }
                             }
                     }
                 } header: {
@@ -90,18 +90,7 @@ struct RecordTabView: View {
                 }
                 Button("취소", role: .cancel) {}
             }
-            .confirmationDialog("녹음 파일을 이 기기에서 삭제할까요?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-                                titleVisibility: .visible, presenting: deleting) { r in
-                Button("삭제", role: .destructive) {
-                    if player.playingKey == "rec-\(r.id)" { player.stop() }
-                    recordings.delete(r.id)
-                }
-            } message: { r in
-                Text(r.meetingID == nil ? "아직 업로드하지 않은 녹음입니다. 삭제하면 되돌릴 수 없습니다." : "서버에 올린 회의는 그대로 남습니다.")
-            }
-            .confirmationDialog("녹음을 버릴까요? 지금까지 녹음한 내용이 삭제됩니다.", isPresented: $confirmDiscard, titleVisibility: .visible) {
-                Button("녹음 버리기", role: .destructive) { recorder.discard() }
-            }
+            .onDisappear { deletion.reset() }
             .onChange(of: router.startRecordingRequest, initial: true) { _, req in
                 guard req else { return }
                 router.startRecordingRequest = false
@@ -110,11 +99,20 @@ struct RecordTabView: View {
             .onAppear { recordings.reload() }
         }
     }
+
+    private func requestDelete(_ r: Recording) {
+        if deletion.tap(r.id) { deleteRecording(r) }
+    }
+
+    private func deleteRecording(_ r: Recording) {
+        if player.playingKey == "rec-\(r.id)" { player.stop() }
+        recordings.delete(r.id)
+    }
 }
 
 struct RecorderPanel: View {
     @EnvironmentObject private var recorder: Recorder
-    @Binding var confirmDiscard: Bool
+    @State private var deletion = TwoTapDeletion()
 
     var body: some View {
         VStack(spacing: 18) {
@@ -134,11 +132,8 @@ struct RecorderPanel: View {
 
             HStack(spacing: 36) {
                 if recorder.isActive {
-                    Button { confirmDiscard = true } label: {
-                        Image(systemName: "trash").font(.title2).frame(width: 56, height: 56)
-                    }
-                    .buttonStyle(.bordered).buttonBorderShape(.circle)
-                    .accessibilityLabel("녹음 버리기")
+                    TwoTapDeleteButton(target: "active", confirmation: $deletion, title: "녹음 삭제") { recorder.discard() }
+                        .frame(width: 90).frame(minHeight: 56)
                 }
 
                 Button {
@@ -188,6 +183,8 @@ struct RecorderPanel: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
         .animation(.default, value: recorder.state)
+        .onChange(of: recorder.state) { _, _ in deletion.reset() }
+        .onDisappear { deletion.reset() }
     }
 
     private var statusText: String {
