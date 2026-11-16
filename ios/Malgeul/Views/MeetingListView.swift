@@ -230,8 +230,9 @@ struct MeetingListView: View {
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                chip("전체", n: store.meetings.count, on: filter == .all) { filter = .all }
-                let busy = store.meetings.filter { !$0.isDone }.count
+                let localCount = recordings.items.filter { $0.meetingID == nil }.count
+                chip("전체", n: store.meetings.count + localCount, on: filter == .all) { filter = .all }
+                let busy = store.meetings.filter { !$0.isDone }.count + localCount
                 if busy > 0 { chip("처리 전·중", n: busy, on: filter == .pending) { filter = .pending } }
                 // 그룹이 둘 이상일 때만 그룹 칩
                 if store.groups.count > 1 {
