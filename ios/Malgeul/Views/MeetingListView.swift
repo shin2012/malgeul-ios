@@ -195,12 +195,16 @@ struct MeetingListView: View {
             }
         }
         if !selectable && !localRecordings.isEmpty {
-            Section("받아쓰기 전 · 이 기기의 녹음") {
+            Section {
                 ForEach(localRecordings) { r in
                     PendingRecordingListRow(recording: r, deletion: $deletion)
-                        .listRowBackground(Color.white)
+                        .selectionDisabled()
                 }
+            } header: {
+                Text("기기 녹음").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.mgFg3).textCase(nil).padding(.top, 8)
             }
+            .listSectionSeparator(.hidden)
         }
         let groups = monthGroups(filtered)
         ForEach(Array(groups.enumerated()), id: \.offset) { (gi: Int, g: (String, [Meeting])) in
@@ -302,12 +306,15 @@ struct MeetingListView: View {
 
     @ViewBuilder private func row(_ m: Meeting, selectable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            if selectable || m.isDone {
-                MeetingRow(meeting: m)
-            } else {
-                Button { tapUnfinished(m) } label: { MeetingRow(meeting: m) }
-                    .buttonStyle(.plain)
-                    .contentShape(Rectangle())
+            HStack(alignment: .top, spacing: 0) {
+                if selectable || m.isDone {
+                    MeetingRow(meeting: m)
+                } else {
+                    Button { tapUnfinished(m) } label: { MeetingRow(meeting: m) }
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
+                }
+                if !selectable { NoteRowMenu { meetingActions(m) }.padding(.top, 2) }
             }
             if deletion.isArmed("meeting-\(m.id)") {
                 TwoTapDeleteButton(target: "meeting-\(m.id)", confirmation: $deletion) {
@@ -327,7 +334,11 @@ struct MeetingListView: View {
         .swipeActions(edge: .leading) {
             Button { editingDate = m } label: { Label("녹음 시각", systemImage: "calendar") }.tint(.accentMalgeul)
         }
-        .contextMenu {
+        .contextMenu { meetingActions(m) }
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+    }
+
+    @ViewBuilder private func meetingActions(_ m: Meeting) -> some View {
             Button { beginRename(m) } label: { Label("제목 수정", systemImage: "pencil") }
             Button { editingDate = m } label: { Label("녹음 시각 수정", systemImage: "calendar") }
             if !m.isDone && !m.isProcessing {
@@ -344,7 +355,6 @@ struct MeetingListView: View {
             }
             Divider()
             Button { requestDelete(m) } label: { Label("삭제", systemImage: "trash") }
-        }
     }
 
     private func moveGroup(_ m: Meeting, _ g: MeetingGroup) {
@@ -496,54 +506,32 @@ struct MeetingListView: View {
 
 struct MeetingRow: View {
     let meeting: Meeting
-    @EnvironmentObject private var store: MeetingStore
     @EnvironmentObject private var device: OnDeviceJobCenter
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(meeting.title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(meeting.isDone ? Color.mgFg : Color.mgFg2)
-                    .lineLimit(2)
-                Spacer(minLength: 4)
-                if meeting.status == "error" {
-                    Image(systemName: "exclamationmark.circle").foregroundStyle(Color.mgDanger).font(.system(size: 14))
-                }
-            }
+        NoteRowContent(title: meeting.title) {
             if let job = device.job(for: meeting.id) {
+                NoteRowMetadata(date: meeting.recordedOrCreated, duration: meeting.durationSeconds)
                 DeviceJobLine(job: job)
             } else if meeting.isProcessing {
+                NoteRowMetadata(date: meeting.recordedOrCreated, duration: meeting.durationSeconds)
                 TranscribeProgressLine(meetingID: meeting.id)
             } else if meeting.status == "error" {
+                NoteRowMetadata(date: meeting.recordedOrCreated, duration: meeting.durationSeconds)
                 Text("받아쓰기 실패\(meeting.errorMessage.map { " · \($0)" } ?? "")")
-                    .font(.system(size: 13.5)).foregroundStyle(Color.mgDanger).lineLimit(1)
+                    .font(.system(size: 13.5)).foregroundStyle(Color.mgDanger).lineLimit(2)
             } else {
-                meta
+                NoteRowMetadata(date: meeting.recordedOrCreated, duration: meeting.durationSeconds, status: statusText)
             }
-            if !meeting.tags.isEmpty {
-                TagRow(tags: meeting.tags)
-            }
+            if !meeting.tags.isEmpty { TagRow(tags: meeting.tags) }
         }
-        .padding(.vertical, 12)
     }
 
-    private var meta: some View {
-        HStack(spacing: 10) {
-            Text(Fmt.when(meeting.recordedOrCreated))
-            if (meeting.durationSeconds ?? 0) > 0 { Text(Fmt.duration(meeting.durationSeconds)) }
-            if meeting.isCompressing {
-                HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("파일 준비 중") }
-            } else if meeting.status == "pending" {
-                Text("받아쓰기 전").fontWeight(.medium).foregroundStyle(Color.accentMalgeul)
-            } else if meeting.isDone && meeting.aiAnalyzed == 0 {
-                Text("정리 중…")
-            }
-        }
-        .lineLimit(1)
-        .monospacedDigit()
-        .font(.system(size: 13.5))
-        .foregroundStyle(Color.mgFg3)
+    private var statusText: String? {
+        if meeting.isCompressing { return "파일 준비 중" }
+        if meeting.status == "pending" { return "받아쓰기 전" }
+        if meeting.isDone && meeting.aiAnalyzed == 0 { return "정리 중…" }
+        return nil
     }
 }
 

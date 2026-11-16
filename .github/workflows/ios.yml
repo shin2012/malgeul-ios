@@ -29,6 +29,8 @@ jobs:
             echo "패키지 받기 실패 $i — 다시 시도"; tail -25 resolve.log; sleep 20
           done
           exit 1
+      - name: 목록 공통 행 구성 시험
+        run: python3 ios/ci/test_note_rows.py
       - name: 두 번 누르기 삭제 정책 시험
         run: bash ios/DeletionTests/run.sh
       - name: 녹음 정책 시험

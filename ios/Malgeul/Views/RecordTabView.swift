@@ -12,8 +12,6 @@ struct RecordTabView: View {
     @EnvironmentObject private var player: AudioPlayer
     @EnvironmentObject private var device: OnDeviceJobCenter
 
-    @State private var renaming: Recording?
-    @State private var renameText = ""
     @State private var deletion = TwoTapDeletion()
 
     var body: some View {
@@ -28,45 +26,7 @@ struct RecordTabView: View {
                         Text("아직 녹음이 없습니다.").foregroundStyle(.secondary)
                     }
                     ForEach(recordings.items) { r in
-                        VStack(alignment: .leading, spacing: 6) {
-                            RecordingRow(recording: r)
-                            if let j = device.job(recording: r.id) { DeviceJobLine(job: j) }
-                            TwoTapDeleteButton(target: r.id, confirmation: $deletion) { deleteRecording(r) }
-                        }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button { requestDelete(r) } label: { Label("삭제", systemImage: "trash") }.tint(Color.mgDanger)
-                                Button { renameText = r.title; renaming = r } label: { Label("이름", systemImage: "pencil") }.tint(.gray)
-                            }
-                            .swipeActions(edge: .leading) {
-                                if r.meetingID == nil && uploads.isUploading(recordingID: r.id) == nil && config.isConfigured {
-                                    Button { recordings.upload(r, autoTranscribe: config.autoTranscribeRecordings) } label: {
-                                        Label("업로드", systemImage: "arrow.up.circle")
-                                    }.tint(.accentMalgeul)
-                                }
-                            }
-                            .contextMenu {
-                                if config.isConfigured && uploads.isUploading(recordingID: r.id) == nil {
-                                    Button { recordings.upload(r, autoTranscribe: false) } label: {
-                                        Label(r.meetingID == nil ? "업로드" : "다시 업로드", systemImage: "arrow.up.circle")
-                                    }
-                                    Button { recordings.upload(r, autoTranscribe: true) } label: {
-                                        Label("업로드 후 바로 받아쓰기", systemImage: "waveform")
-                                    }
-                                    if AppConfig.deviceTranscribeAvailable && r.meetingID == nil && device.job(recording: r.id) == nil {
-                                        Button {
-                                            device.requestNotificationPermission()
-                                            device.enqueueLocalFirst(r)
-                                        } label: { Label("이 기기에서 받아쓰고 함께 올리기", systemImage: "iphone") }
-                                    }
-                                }
-                                if let id = r.meetingID {
-                                    Button { router.meetingID = id; router.tab = .meetings } label: { Label("회의 열기", systemImage: "text.bubble") }
-                                }
-                                ShareLink(item: r.fileURL) { Label("공유", systemImage: "square.and.arrow.up") }
-                                Button { renameText = r.title; renaming = r } label: { Label("이름 변경", systemImage: "pencil") }
-                                Divider()
-                                Button { requestDelete(r) } label: { Label("삭제", systemImage: "trash") }
-                            }
+                        PendingRecordingListRow(recording: r, deletion: $deletion)
                     }
                 } header: {
                     Text("내 녹음")
@@ -74,6 +34,9 @@ struct RecordTabView: View {
                     Text("녹음 파일은 이 기기의 ‘파일 › 나의 iPhone › 말글 › 녹음’에도 보관됩니다.")
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.mgBg)
             .navigationTitle("녹음")
             .toolbar {
                 if presented {
@@ -82,14 +45,6 @@ struct RecordTabView: View {
             }
             .refreshable { recordings.reload(); device.resume() }
             .sheet(item: $recorder.finished) { r in FinishRecordingSheet(recording: r) }
-            .alert("이름 변경", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { r in
-                TextField("제목", text: $renameText)
-                Button("저장") {
-                    let t = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !t.isEmpty { recordings.rename(r.id, title: t) }
-                }
-                Button("취소", role: .cancel) {}
-            }
             .onDisappear { deletion.reset() }
             .onChange(of: router.startRecordingRequest, initial: true) { _, req in
                 guard req else { return }
@@ -100,14 +55,7 @@ struct RecordTabView: View {
         }
     }
 
-    private func requestDelete(_ r: Recording) {
-        if deletion.tap(r.id) { deleteRecording(r) }
-    }
 
-    private func deleteRecording(_ r: Recording) {
-        if player.playingKey == "rec-\(r.id)" { player.stop() }
-        recordings.delete(r.id)
-    }
 }
 
 struct RecorderPanel: View {
@@ -219,53 +167,34 @@ struct Waveform: View {
 
 struct RecordingRow: View {
     let recording: Recording
-    @EnvironmentObject private var player: AudioPlayer
     @EnvironmentObject private var uploads: UploadCenter
-    @EnvironmentObject private var router: Router
-
-    private var key: String { "rec-\(recording.id)" }
+    @EnvironmentObject private var device: OnDeviceJobCenter
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button { player.toggleFile(recording.fileURL, key: key) } label: {
-                Image(systemName: player.playingKey == key ? "stop.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.accentMalgeul)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(player.playingKey == key ? "정지" : "재생")
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(recording.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                Text("\(Fmt.date(recording.startedAt)) · \(Fmt.clock(recording.duration)) · \(Fmt.size(recording.fileSize))")
-                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                if recording.fromWatch == true || recording.place != nil {
-                    Label(recording.place ?? "장소 없음", systemImage: recording.fromWatch == true ? "applewatch" : "mappin.and.ellipse")
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        NoteRowContent(title: recording.title) {
+            NoteRowMetadata(date: recording.startedAt, duration: Int(recording.duration), status: statusText)
+            if let job = device.job(recording: recording.id) {
+                DeviceJobLine(job: job)
+            } else if let job = uploads.isUploading(recordingID: recording.id) {
+                if job.state == .failed {
+                    Text(job.message ?? "업로드 실패").foregroundStyle(Color.mgDanger)
+                        .font(.system(size: 13.5)).lineLimit(2)
+                } else if job.state == .uploading {
+                    ProgressView(value: job.progress).tint(Color.accentMalgeul)
+                } else {
+                    HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("업로드 준비 중") }
+                        .font(.system(size: 13.5)).foregroundStyle(Color.mgFg3)
                 }
-                status
+            }
+            if let place = recording.place {
+                Text(place).font(.system(size: 13.5)).foregroundStyle(Color.mgFg3).lineLimit(1)
             }
         }
     }
 
-    @ViewBuilder private var status: some View {
-        if let job = uploads.isUploading(recordingID: recording.id) {
-            switch job.state {
-            case .failed:
-                Text(job.message ?? "업로드 실패").font(.caption).foregroundStyle(.red)
-            case .uploading:
-                ProgressView(value: job.progress).tint(.accentMalgeul)
-            default:
-                HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("업로드 준비 중").font(.caption).foregroundStyle(.secondary) }
-            }
-        } else if let id = recording.meetingID {
-            Button { router.meetingID = id; router.tab = .meetings } label: {
-                Label("업로드됨", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-        } else {
-            Label("기기에만 있음", systemImage: "iphone").font(.caption).foregroundStyle(Color.accentMalgeul)
-        }
+    private var statusText: String? {
+        if device.job(recording: recording.id) != nil || uploads.isUploading(recordingID: recording.id) != nil { return nil }
+        return recording.meetingID == nil ? "받아쓰기 전" : "업로드됨"
     }
 }
 
