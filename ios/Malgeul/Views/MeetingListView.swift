@@ -206,6 +206,9 @@ struct MeetingListView: View {
             }
             .listSectionSeparator(.hidden)
         }
+        let displayedCount = filtered.count + (selectable ? 0 : localRecordings.count)
+        let displayedDuration = filtered.reduce(0) { $0 + ($1.durationSeconds ?? 0) }
+            + (selectable ? 0 : localRecordings.reduce(0) { $0 + Int($1.duration) })
         let groups = monthGroups(filtered)
         ForEach(Array(groups.enumerated()), id: \.offset) { (gi: Int, g: (String, [Meeting])) in
             Section {
@@ -219,7 +222,7 @@ struct MeetingListView: View {
                 }
             } footer: {
                 if gi == groups.count - 1 && !filtered.isEmpty {
-                    Text("노트 \(filtered.count)개 · 총 \(Fmt.totalDuration(filtered.reduce(0) { $0 + ($1.durationSeconds ?? 0) }))")
+                    Text("노트 \(displayedCount)개 · 총 \(Fmt.totalDuration(displayedDuration))")
                         .font(.system(size: 13)).monospacedDigit().foregroundStyle(Color.mgFg4)
                         .frame(maxWidth: .infinity).padding(.top, 20).padding(.bottom, 12)
                 }

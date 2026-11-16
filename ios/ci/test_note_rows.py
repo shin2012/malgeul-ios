@@ -18,6 +18,10 @@ class NoteRowContract(unittest.TestCase):
         self.assertIn('if deletion.isArmed(', source)
         self.assertIn('NoteRowMenu', source)
 
+    def test_footer_counts_visible_local_recordings(self):
+        source = (ROOT / 'MeetingListView.swift').read_text()
+        self.assertIn('filtered.count + (selectable ? 0 : localRecordings.count)', source)
+
     def test_recording_row_has_no_large_play_circle_or_duplicate_local_label(self):
         source = (ROOT / 'RecordTabView.swift').read_text().split('struct RecordingRow: View {', 1)[1].split('/// 녹음 끝', 1)[0]
         self.assertNotIn('play.circle.fill', source)

@@ -37,7 +37,7 @@ enum DebugRoute {
         case "detail": r.meetingID = 5
         case "chat": r.meetingID = 5; r.debugOpenChat = true
         case "doc": r.meetingID = 5; r.debugOpenDoc = true
-        case "record": r.tab = .record
+        case "record": break // 시트는 루트가 표시된 뒤 연다
         case "settings": r.tab = .settings
         case "login": AppConfig.shared.signOut(); r.showLogin = true
         case "uploadtest":
@@ -201,6 +201,15 @@ struct RootView: View {
         MeetingsSplitView()
             .fullScreenCover(isPresented: $router.showLogin) { LoginView() }
             .onAppear { if !config.isConfigured { router.showLogin = true } else { Task { await API.shared.refreshMe() } } }
+            #if DEBUG
+            .task {
+                // 아이패드 SplitView가 자리 잡기 전에 연 시트는 캡처에서 빠질 수 있다.
+                if UserDefaults.standard.string(forKey: "screen") == "record" {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    router.tab = .record
+                }
+            }
+            #endif
             .onChange(of: config.token) { _, t in
                 // 로그아웃·로그인 풀림 → 목록 비우고 로그인 화면
                 if t.isEmpty { store.clear(); router.tab = .meetings; router.showLogin = true }
