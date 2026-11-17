@@ -96,7 +96,7 @@ struct NoteRowMenu<Actions: View>: View {
         .buttonStyle(.borderless)
         .accessibilityLabel("노트 메뉴")
         .accessibilityIdentifier("note-menu")
-        .popover(isPresented: $open, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
+        .popover(isPresented: $open, attachmentAnchor: .rect(.bounds), arrowEdge: nil) {
             VStack(alignment: .leading, spacing: 0) { actions() }
                 .frame(width: 260, alignment: .leading)
                 .padding(12)
