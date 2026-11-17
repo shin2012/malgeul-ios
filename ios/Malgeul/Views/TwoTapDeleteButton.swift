@@ -6,16 +6,23 @@ struct TwoTapDeleteButton: View {
     @Binding var confirmation: TwoTapDeletion
     var title = "삭제"
     let action: () -> Void
+    @Environment(\.noteMenuDismiss) private var closeMenu
 
     var body: some View {
         Button {
-            if confirmation.tap(target) { action() }
+            if confirmation.tap(target) { closeMenu(); action() }
         } label: {
-            Label(confirmation.isArmed(target) ? "한 번 더 눌러 삭제" : title, systemImage: "trash")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.mgDanger)
+            ZStack(alignment: .leading) {
+                Label("한 번 더 눌러 삭제", systemImage: "trash").hidden().accessibilityHidden(true)
+                Label(confirmation.isArmed(target) ? "한 번 더 눌러 삭제" : title, systemImage: "trash")
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Color.mgDanger)
+            .frame(minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
+        .accessibilityIdentifier("delete-confirm-button")
         .task(id: confirmation.target) {
             guard confirmation.target == target else { return }
             do { try await Task.sleep(for: .seconds(4)) } catch { return }
@@ -41,31 +48,19 @@ struct PendingRecordingListRow: View {
     private var playing: Bool { player.playingKey == "rec-\(recording.id)" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        SwipeDeleteRow(target: target, confirmation: $deletion,
+                       disabled: uploads.isUploading(recordingID: recording.id) != nil,
+                       background: Color.mgBg2, onDelete: { deleteRecording() }) {
             HStack(alignment: .top, spacing: 0) {
                 RecordingRow(recording: recording)
-                NoteRowMenu { actions }.padding(.top, 2)
-            }
-            if deletion.isArmed(target) {
-                TwoTapDeleteButton(target: target, confirmation: $deletion) { deleteRecording() }
-                    .padding(.bottom, 12)
+                NoteRowMenu(onClose: { deletion.reset() }) { actions }.padding(.top, 2)
             }
         }
+        .accessibilityIdentifier("local-recording-" + recording.id)
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-        .listRowBackground(Color.white)
+        .listRowBackground(Color.mgBg2)
         .listRowSeparatorTint(Color.mgLine)
         .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button { requestDelete() } label: { Label("삭제", systemImage: "trash") }.tint(Color.mgDanger)
-            Button { beginRename() } label: { Label("제목", systemImage: "pencil") }.tint(.gray)
-        }
-        .swipeActions(edge: .leading) {
-            if canUpload && recording.meetingID == nil {
-                Button { upload(auto: config.autoTranscribeRecordings) } label: { Label("업로드", systemImage: "arrow.up.circle") }
-                    .tint(Color.accentMalgeul)
-            }
-        }
-        .contextMenu { actions }
         .alert("제목 수정", isPresented: $renaming) {
             TextField("제목", text: $title)
             Button("저장") {
@@ -77,20 +72,20 @@ struct PendingRecordingListRow: View {
     }
 
     @ViewBuilder private var actions: some View {
-        Button { player.toggleFile(recording.fileURL, key: "rec-\(recording.id)") } label: {
+        NoteActionButton { player.toggleFile(recording.fileURL, key: "rec-\(recording.id)") } label: {
             Label(playing ? "재생 정지" : "재생", systemImage: playing ? "stop" : "play")
         }
         if let id = recording.meetingID {
-            Button { router.meetingID = id; router.tab = .meetings } label: { Label("열기", systemImage: "text.bubble") }
+            NoteActionButton { router.meetingID = id; router.tab = .meetings } label: { Label("열기", systemImage: "text.bubble") }
         }
-        Button { beginRename() } label: { Label("제목 수정", systemImage: "pencil") }
+        NoteActionButton { beginRename() } label: { Label("제목 수정", systemImage: "pencil") }
         if canUpload {
-            Button { upload(auto: false) } label: {
+            NoteActionButton { upload(auto: false) } label: {
                 Label(recording.meetingID == nil ? "업로드" : "다시 업로드", systemImage: "arrow.up.circle")
             }
-            Button { upload(auto: true) } label: { Label("업로드 후 바로 받아쓰기", systemImage: "waveform") }
+            NoteActionButton { upload(auto: true) } label: { Label("업로드 후 바로 받아쓰기", systemImage: "waveform") }
             if AppConfig.deviceTranscribeAvailable && recording.meetingID == nil && device.job(recording: recording.id) == nil {
-                Button {
+                NoteActionButton {
                     device.requestNotificationPermission()
                     device.enqueueLocalFirst(recording)
                 } label: { Label("이 기기에서 받아쓰고 함께 올리기", systemImage: "iphone") }
@@ -98,7 +93,10 @@ struct PendingRecordingListRow: View {
         }
         ShareLink(item: recording.fileURL) { Label("공유", systemImage: "square.and.arrow.up") }
         Divider()
-        Button { requestDelete() } label: { Label("삭제", systemImage: "trash") }
+        TwoTapDeleteButton(target: target, confirmation: $deletion) { deleteRecording() }
+            .disabled(uploads.isUploading(recordingID: recording.id) != nil)
+        Text("기기에 저장된 녹음만 삭제합니다.")
+            .font(.system(size: 12)).foregroundStyle(Color.mgFg3)
     }
 
     private var canUpload: Bool {
@@ -106,7 +104,6 @@ struct PendingRecordingListRow: View {
     }
     private func upload(auto: Bool) { recordings.upload(recording, autoTranscribe: auto) }
     private func beginRename() { title = recording.title; renaming = true }
-    private func requestDelete() { if deletion.tap(target) { deleteRecording() } }
     private func deleteRecording() {
         if playing { player.stop() }
         recordings.delete(recording.id)

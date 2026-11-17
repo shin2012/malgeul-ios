@@ -14,6 +14,7 @@ struct UploadJob: Codable, Identifiable, Equatable {
     var recordedAt: Date?
     var autoTranscribe = false
     var recordingID: String?
+    var meetingID: Int?
     var removeSourceWhenDone = false
     /// 업로드가 끝나면 이 기기에서 받아쓰기 (설정 '받아쓰기 방식 = 이 기기')
     var deviceTranscribe: Bool?
@@ -186,9 +187,7 @@ final class UploadCenter: NSObject, ObservableObject {
             // 1) 중복 확인 (압축 전 원본 기준 — 서버도 이 해시로 저장)
             let hash = await Task.detached(priority: .userInitiated) { UploadKit.sha256(of: src) }.value
             if let hash, let dup = try? await API.shared.checkHash(hash, server: AppConfig.shared.server), dup.duplicate {
-                duplicateTitle = dup.existing?.title ?? "(제목 없음)"
-                if let dj = job.deviceResultJob.flatMap(UUID.init) { OnDeviceJobCenter.shared.uploadDuplicate(dj, existingID: dup.existing?.id) }
-                finish(id, removeSource: true)
+                resolveDuplicate(id, existingID: dup.existing?.id, title: dup.existing?.title)
                 return
             }
 
@@ -307,6 +306,35 @@ final class UploadCenter: NSObject, ObservableObject {
         save()
     }
 
+    private func resolveDuplicate(_ id: UUID, existingID: Int?, title: String?) {
+        guard let job = jobs.first(where: { $0.id == id }) else { return }
+        guard let existingID else {
+            set(id) { $0.state = .failed; $0.message = "기존 노트 연결 정보를 받지 못했습니다. 다시 시도해 주세요." }
+            return
+        }
+        set(id) { $0.state = .finishing; $0.message = "기존 노트에 연결 중" }
+        Task {
+            do {
+                let data = try await API.shared.data("meetings/\(existingID)")
+                guard self.jobs.contains(where: { $0.id == id }) else { return }
+                let displayID = job.recordingID.map { "local-" + $0 } ?? "upload-" + job.id.uuidString
+                guard MeetingStore.shared.acceptUpload(data, displayID: displayID) else { throw APIError.badResponse }
+                set(id) { $0.meetingID = existingID }
+                if let rid = job.recordingID {
+                    RecordingStore.shared.markUploaded(rid, meetingID: existingID, removeIfConfigured: false)
+                }
+                if let dj = job.deviceResultJob.flatMap(UUID.init) {
+                    OnDeviceJobCenter.shared.uploadDuplicate(dj, existingID: existingID)
+                }
+                duplicateTitle = title ?? "기존 노트"
+                finish(id, removeSource: true)
+                await MeetingStore.shared.refresh()
+            } catch {
+                set(id) { $0.state = .failed; $0.message = "기존 노트 연결 실패: \(error.localizedDescription)" }
+            }
+        }
+    }
+
     private func completed(_ id: UUID, status: Int, data: Data, error: Error?) {
         guard let job = jobs.first(where: { $0.id == id }) else { return }
         if let error {
@@ -321,17 +349,20 @@ final class UploadCenter: NSObject, ObservableObject {
             return
         }
         if obj["duplicate"] as? Bool == true {
-            duplicateTitle = ((obj["existing"] as? [String: Any])?["title"] as? String) ?? "(제목 없음)"
-            if let dj = job.deviceResultJob.flatMap(UUID.init) {
-                OnDeviceJobCenter.shared.uploadDuplicate(dj, existingID: ((obj["existing"] as? [String: Any])?["id"] as? NSNumber)?.intValue)
-            }
-            finish(id, removeSource: true)
+            let existing = obj["existing"] as? [String: Any]
+            resolveDuplicate(id, existingID: (existing?["id"] as? NSNumber)?.intValue, title: existing?["title"] as? String)
             return
         }
         guard let meetingID = (obj["id"] as? NSNumber)?.intValue else {
             set(id) { $0.state = .failed; $0.message = (obj["error"] as? String) ?? "업로드 실패" }
             return
         }
+        let displayID = job.recordingID.map { "local-" + $0 } ?? "upload-" + job.id.uuidString
+        guard MeetingStore.shared.acceptUpload(data, displayID: displayID) else {
+            set(id) { $0.state = .failed; $0.message = "저장 결과를 읽지 못했습니다. 다시 시도해 주세요." }
+            return
+        }
+        set(id) { $0.meetingID = meetingID }
         if let rid = job.recordingID { RecordingStore.shared.markUploaded(rid, meetingID: meetingID) }
         if let dj = job.deviceResultJob.flatMap(UUID.init) {
             OnDeviceJobCenter.shared.uploaded(dj, meetingID: meetingID)

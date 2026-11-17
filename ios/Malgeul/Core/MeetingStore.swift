@@ -34,9 +34,35 @@ final class MeetingStore: ObservableObject {
         didSet { UserDefaults.standard.set(ascending, forKey: "sortAsc") }
     }
 
+    @Published private(set) var displayAliases: [Int: String] = [:]
+    private var recentUploads = Set<Int>()
     private var pollTask: Task<Void, Never>?
+    private var foreground = true
+
+    func linkDisplay(_ meetingID: Int, to displayID: String) {
+        if displayAliases[meetingID] == nil { displayAliases[meetingID] = displayID }
+        UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: displayAliases.map { (String($0.key), $0.value) }), forKey: "noteDisplayAliases")
+    }
+
+    /// 업로드 성공 응답을 목록 재조회보다 먼저 반영해 빈 행 전환을 막는다.
+    func acceptUpload(_ data: Data, displayID: String) -> Bool {
+        guard let m = try? JSONDecoder().decode(Meeting.self, from: data) else { return false }
+        linkDisplay(m.id, to: displayID)
+        update(m)
+        recentUploads.insert(m.id)
+        schedulePolling()
+        return true
+    }
+
+    func setForeground(_ active: Bool) {
+        foreground = active
+        if !active { pollTask?.cancel(); pollTask = nil }
+        else { schedulePolling() }
+    }
 
     private init() {
+        let saved = UserDefaults.standard.dictionary(forKey: "noteDisplayAliases") as? [String: String] ?? [:]
+        displayAliases = Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in Int(key).map { ($0, value) } })
         if let d = DiskCache.load(key: "meetings"), let list = try? JSONDecoder().decode([Meeting].self, from: d) {
             meetings = list
             loaded = true
@@ -50,6 +76,9 @@ final class MeetingStore: ObservableObject {
 
     /// 로그아웃 시 화면·캐시 비움
     func clear() {
+        pollTask?.cancel(); pollTask = nil
+        recentUploads = []; displayAliases = [:]
+        UserDefaults.standard.removeObject(forKey: "noteDisplayAliases")
         meetings = []; groups = []; loaded = false
         DiskCache.remove(key: "meetings"); DiskCache.remove(key: "groups")
     }
@@ -59,7 +88,10 @@ final class MeetingStore: ObservableObject {
             let d = try await API.shared.meetingsRaw()
             let list = try JSONDecoder().decode([Meeting].self, from: d)
             DiskCache.save(d, key: "meetings")
-            meetings = list
+            let ids = Set(list.map(\.id))
+            let retained = meetings.filter { recentUploads.contains($0.id) && !ids.contains($0.id) }
+            meetings = list + retained
+            recentUploads.subtract(ids)
             lastError = nil
         } catch {
             if !error.isCancellation { lastError = error.localizedDescription }
@@ -80,9 +112,9 @@ final class MeetingStore: ObservableObject {
 
     func remove(_ ids: Set<Int>) { meetings.removeAll { ids.contains($0.id) } }
 
-    /// 압축 중(audio_ready=0) 또는 AI 분석 대기(done, ai_analyzed=0) 항목이 있으면 3초마다 다시 받음
+    /// 전사·분석·화자 추정이 남아 있는 동안만 공통 목록을 갱신한다.
     private func schedulePolling() {
-        let needs = meetings.contains { $0.audioReady == 0 || ($0.isDone && $0.aiAnalyzed == 0) }
+        let needs = foreground && meetings.contains { $0.isCompressing || $0.isProcessing || $0.needsPostProcessing }
         guard needs else { pollTask?.cancel(); pollTask = nil; return }
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in

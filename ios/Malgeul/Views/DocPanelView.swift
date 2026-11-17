@@ -15,7 +15,7 @@ final class DocModel: ObservableObject {
     private var waitingSince: Date?
     private var waitDeadline = Date.distantPast
 
-    var busy: Bool { report?.status == "processing" || speaker?.status == "processing" || waitingSince != nil }
+    var busy: Bool { report?.status == "processing" || ["queued", "processing"].contains(speaker?.status ?? "") || waitingSince != nil }
 
     /// 기기 받아쓰기·화자 재추정 직후 호출
     func watchSpeaker(since: Date) async {
@@ -38,7 +38,10 @@ final class DocModel: ObservableObject {
         let (rr, ss) = await (r, s)
         if let rr { report = rr }
         if let ss {
-            if prevSpeakerStatus == "processing", let st = ss.status, st != "processing" { onSpeakerFinished?() }
+            if ["queued", "processing"].contains(prevSpeakerStatus ?? ""), let st = ss.status, !["queued", "processing"].contains(st) {
+                waitingSince = nil
+                onSpeakerFinished?()
+            }
             else if let since = waitingSince, let st = ss.status, st != "processing",
                     let at = ss.result?["at"]?.string.flatMap(DateParse.iso), at >= since.addingTimeInterval(-5) {
                 waitingSince = nil

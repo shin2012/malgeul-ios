@@ -1,0 +1,41 @@
+name: Note List UI Tests
+on:
+  workflow_dispatch:
+jobs:
+  notes:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 선택
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | grep -viE 'beta|_RC' | sort -V | tail -1)"
+      - name: 실제 목록 모델·삭제 정책 시험
+        run: |
+          bash ios/NoteListTests/run.sh
+          bash ios/DeletionTests/run.sh
+          python3 ios/ci/test_note_rows.py
+          python3 ios/ci/check_background_contract.py
+      - name: 가짜 서버
+        run: |
+          nohup python3 ios/ci/mock_server.py > "$RUNNER_TEMP/mock.log" 2>&1 &
+          sleep 2
+          curl --fail http://127.0.0.1:8080/health
+      - name: Swift 패키지 받기
+        working-directory: ios
+        run: |
+          for i in 1 2 3 4; do
+            if xcodebuild -resolvePackageDependencies -project Malgeul.xcodeproj -scheme MalgeulUITests -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" > "$RUNNER_TEMP/resolve.log" 2>&1; then exit 0; fi
+            tail -25 "$RUNNER_TEMP/resolve.log"
+            sleep 15
+          done
+          exit 1
+      - name: 아이폰·아이패드 실제 UI 시험
+        run: python3 ios/ci/run_note_ui.py "$RUNNER_TEMP/note-verification"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: note-verification
+          path: |
+            ${{ runner.temp }}/note-verification
+            ${{ runner.temp }}/mock.log
+            ${{ runner.temp }}/resolve.log

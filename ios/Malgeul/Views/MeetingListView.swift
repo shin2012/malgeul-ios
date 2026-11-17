@@ -32,6 +32,7 @@ struct MeetingListView: View {
     @EnvironmentObject private var uploads: UploadCenter
     @EnvironmentObject private var device: OnDeviceJobCenter
     @Environment(\.horizontalSizeClass) private var hsize
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var search = ""
     @State private var filter: ListFilter = .all
@@ -39,6 +40,7 @@ struct MeetingListView: View {
     @State private var multi = Set<Int>()
     @State private var deletion = TwoTapDeletion()
     @State private var deleting = false
+    @State private var pendingExpanded = true
     @State private var importing = false
     @State private var askTranscribe: Meeting?
     @State private var compressingAlert = false
@@ -52,7 +54,7 @@ struct MeetingListView: View {
         var all = store.meetings
         switch filter {
         case .all: break
-        case .pending: all = all.filter { !$0.isDone }
+        case .pending: all = all.filter { !$0.isSettled || device.job(for: $0.id) != nil }
         case .tag(let t): all = all.filter { $0.tags.contains(t) }
         case .group(let g, _): all = all.filter { $0.groupId == g }
         }
@@ -107,6 +109,10 @@ struct MeetingListView: View {
             .onChange(of: filter) { _, _ in deletion.reset() }
             .onChange(of: selecting) { _, _ in deletion.reset() }
             .onDisappear { deletion.reset() }
+            .onChange(of: scenePhase) { _, phase in
+                store.setForeground(phase == .active)
+                if phase == .active && config.isConfigured { Task { await store.refresh() } }
+            }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio, .movie, .mpeg4Movie, .mpeg4Audio],
                           allowsMultipleSelection: true) { result in
                 if case .success(let urls) = result { urls.forEach { uploads.enqueueImported($0) } }
@@ -189,35 +195,39 @@ struct MeetingListView: View {
                 Label(err, systemImage: "wifi.exclamationmark").font(.footnote).foregroundStyle(.secondary)
             }
         }
-        if !uploads.jobs.isEmpty && !selectable {
-            Section("업로드") {
-                ForEach(uploads.jobs) { UploadJobRow(job: $0) }
-            }
-        }
-        if !selectable && !localRecordings.isEmpty {
+        let shown = displayedEntries.filter { !selectable || meetingFor($0) != nil }
+        let pending = shown.filter { isPending($0) }
+        if !pending.isEmpty {
             Section {
-                ForEach(localRecordings) { r in
-                    PendingRecordingListRow(recording: r, deletion: $deletion)
-                        .selectionDisabled()
+                if pendingExpanded || selecting {
+                    ForEach(pending) { entry in projectedRow(entry, selectable: selectable) }
                 }
             } header: {
-                Text("기기 녹음").font(.system(size: 13, weight: .semibold))
+                Button { withAnimation { pendingExpanded.toggle() } } label: {
+                    HStack {
+                        Text("녹음·처리 중 \(pending.count)")
+                        Spacer()
+                        Image(systemName: pendingExpanded ? "chevron.up" : "chevron.down")
+                    }
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.mgFg3).textCase(nil).padding(.top, 8)
+                }
+                .buttonStyle(.plain)
             }
             .listSectionSeparator(.hidden)
         }
-        let displayedCount = filtered.count + (selectable ? 0 : localRecordings.count)
-        let displayedDuration = filtered.reduce(0) { $0 + ($1.durationSeconds ?? 0) }
-            + (selectable ? 0 : localRecordings.reduce(0) { $0 + Int($1.duration) })
-        let groups = monthGroups(filtered)
+        let displayedCount = shown.count
+        let displayedDuration = shown.reduce(0) { $0 + durationFor($1) }
+        let ready = shown.filter { !isPending($0) }.compactMap { meetingFor($0) }
+        let groups = monthGroups(ready)
         ForEach(Array(groups.enumerated()), id: \.offset) { (gi: Int, g: (String, [Meeting])) in
             Section {
                 ForEach(g.1) { m in
-                    row(m, selectable: selectable)
+                    row(m, selectable: selectable).id(store.displayAliases[m.id] ?? "meeting-\(m.id)")
                 }
             } header: {
-                if !g.0.isEmpty {
-                    Text(g.0).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.mgFg3).textCase(nil)
+                if gi == 0 || !g.0.isEmpty {
+                    Text(gi == 0 ? (g.0.isEmpty ? "정리된 노트" : "정리된 노트 · " + g.0) : g.0).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.mgFg3).textCase(nil)
                         .padding(.top, 8)
                 }
             } footer: {
@@ -230,6 +240,12 @@ struct MeetingListView: View {
             // 묶음 아래 구분선은 그리지 않음 (맨 아래 요약 밑에 짧은 선이 생기던 문제)
             .listSectionSeparator(.hidden)
         }
+        if ready.isEmpty && !shown.isEmpty {
+            Text("녹음과 노트 \(displayedCount)개 · 총 \(Fmt.totalDuration(displayedDuration))")
+                .font(.system(size: 13)).foregroundStyle(Color.mgFg3)
+                .frame(maxWidth: .infinity).padding(.vertical, 16)
+                .listRowSeparator(.hidden).listRowBackground(Color.clear)
+        }
     }
 
     // MARK: 웹과 같은 부분들
@@ -237,10 +253,9 @@ struct MeetingListView: View {
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                let localCount = recordings.items.filter { $0.meetingID == nil }.count
-                chip("전체", n: store.meetings.count + localCount, on: filter == .all) { filter = .all }
-                let busy = store.meetings.filter { !$0.isDone }.count + localCount
-                if busy > 0 { chip("처리 전·중", n: busy, on: filter == .pending) { filter = .pending } }
+                let busy = allEntries.filter { isPending($0) }.count
+                chip("전체", n: allEntries.count, on: filter == .all) { filter = .all }
+                if busy > 0 { chip("녹음·처리 중", n: busy, on: filter == .pending) { filter = .pending } }
                 // 그룹이 둘 이상일 때만 그룹 칩
                 if store.groups.count > 1 {
                     ForEach(store.groups) { (g: MeetingGroup) in
@@ -276,18 +291,10 @@ struct MeetingListView: View {
 
     /// 오른쪽 아래 녹음 · 올리기 (웹 모바일과 같음)
     @ViewBuilder private var fab: some View {
-        if config.isConfigured && !selecting {
+        if !selecting {
             HStack(spacing: 10) {
                 Spacer()
-                RecordFabButton { startRecording() }
-                Button { importing = true } label: {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 18, weight: .medium)).foregroundStyle(Color.mgFg2)
-                        .frame(width: 52, height: 52)
-                        .background(Color.white, in: Circle())
-                        .overlay(Circle().stroke(Color.mgLine, lineWidth: 1))
-                        .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
-                }
-                .accessibilityLabel("파일 올리기")
+                RecordFabButton(onStart: { startRecording() }, onUpload: { importing = true })
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 16)
@@ -308,7 +315,9 @@ struct MeetingListView: View {
     }
 
     @ViewBuilder private func row(_ m: Meeting, selectable: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        SwipeDeleteRow(target: "meeting-\(m.id)", confirmation: $deletion, disabled: deleting || selectable,
+                       background: router.meetingID == m.id && !selectable ? Color.mgAccentWeak : (m.isSettled ? Color.white : Color.mgBg2),
+                       onDelete: { Task { await delete([m.id]) } }) {
             HStack(alignment: .top, spacing: 0) {
                 if selectable || m.isDone {
                     MeetingRow(meeting: m)
@@ -317,47 +326,37 @@ struct MeetingListView: View {
                         .buttonStyle(.plain)
                         .contentShape(Rectangle())
                 }
-                if !selectable { NoteRowMenu { meetingActions(m) }.padding(.top, 2) }
-            }
-            if deletion.isArmed("meeting-\(m.id)") {
-                TwoTapDeleteButton(target: "meeting-\(m.id)", confirmation: $deletion) {
-                    Task { await delete([m.id]) }
-                }
-                .padding(.bottom, 8)
+                if !selectable { NoteRowMenu(onClose: { deletion.reset() }) { meetingActions(m) }.padding(.top, 2) }
             }
         }
         .tag(m.id)
-        .listRowBackground(router.meetingID == m.id && !selectable ? Color.mgAccentWeak : Color.white)
+        .listRowBackground(router.meetingID == m.id && !selectable ? Color.mgAccentWeak : (m.isSettled ? Color.white : Color.mgBg2))
         .listRowSeparatorTint(Color.mgLine)
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button { requestDelete(m) } label: { Label("삭제", systemImage: "trash") }.tint(Color.mgDanger)
-            Button { beginRename(m) } label: { Label("제목", systemImage: "pencil") }.tint(.gray)
-        }
-        .swipeActions(edge: .leading) {
-            Button { editingDate = m } label: { Label("녹음 시각", systemImage: "calendar") }.tint(.accentMalgeul)
-        }
-        .contextMenu { meetingActions(m) }
         .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
     }
 
     @ViewBuilder private func meetingActions(_ m: Meeting) -> some View {
-            Button { beginRename(m) } label: { Label("제목 수정", systemImage: "pencil") }
-            Button { editingDate = m } label: { Label("녹음 시각 수정", systemImage: "calendar") }
+            NoteActionButton { beginRename(m) } label: { Label("제목 수정", systemImage: "pencil") }
+            NoteActionButton { editingDate = m } label: { Label("녹음 시각 수정", systemImage: "calendar") }
             if !m.isDone && !m.isProcessing {
-                Button { tapUnfinished(m) } label: { Label("받아쓰기", systemImage: "waveform") }
+                NoteActionButton { tapUnfinished(m) } label: { Label("받아쓰기", systemImage: "waveform") }
             }
             if store.groups.count > 1 {
                 Menu {
                     ForEach(store.groups) { (g: MeetingGroup) in
-                        Button { moveGroup(m, g) } label: {
+                        NoteActionButton { moveGroup(m, g) } label: {
                             if m.groupId == g.id { Label(g.name, systemImage: "checkmark") } else { Text(g.name) }
                         }
                     }
                 } label: { Label("그룹 옮기기", systemImage: "folder") }
             }
             Divider()
-            Button { requestDelete(m) } label: { Label("삭제", systemImage: "trash") }
+            TwoTapDeleteButton(target: "meeting-\(m.id)", confirmation: $deletion) {
+                Task { await delete([m.id]) }
+            }.disabled(deleting)
+            Text("서버의 노트와 음성을 삭제합니다.")
+                .font(.system(size: 12)).foregroundStyle(Color.mgFg3)
     }
 
     private func moveGroup(_ m: Meeting, _ g: MeetingGroup) {
@@ -425,14 +424,75 @@ struct MeetingListView: View {
         }
     }
 
-    private var localRecordings: [Recording] {
-        guard filter == .all || filter == .pending else { return [] }
-        let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return recordings.items.filter { $0.meetingID == nil && (q.isEmpty || $0.title.localizedCaseInsensitiveContains(q)) }
+    private var allEntries: [NoteListProjection.Row] {
+        NoteListProjection.rows(
+            locals: recordings.items.map { .init(id: $0.id, meetingID: $0.meetingID) },
+            uploads: uploads.jobs.map { .init(id: $0.id.uuidString, recordingID: $0.recordingID, meetingID: $0.meetingID) },
+            meetingIDs: store.sorted(store.meetings).map(\.id), aliases: store.displayAliases)
     }
 
-    private func requestDelete(_ m: Meeting) {
-        if deletion.tap("meeting-\(m.id)") { Task { await delete([m.id]) } }
+    private func meetingFor(_ entry: NoteListProjection.Row) -> Meeting? {
+        entry.meetingID.flatMap { id in store.meetings.first { $0.id == id } }
+    }
+    private func recordingFor(_ entry: NoteListProjection.Row) -> Recording? {
+        entry.recordingID.flatMap { id in recordings.items.first { $0.id == id } }
+    }
+    private func uploadFor(_ entry: NoteListProjection.Row) -> UploadJob? {
+        entry.uploadID.flatMap { id in uploads.jobs.first { $0.id.uuidString == id } }
+    }
+    private func isPending(_ entry: NoteListProjection.Row) -> Bool {
+        guard let m = meetingFor(entry) else { return true }
+        return !m.isSettled || device.job(for: m.id) != nil
+    }
+    private func durationFor(_ entry: NoteListProjection.Row) -> Int {
+        meetingFor(entry)?.durationSeconds ?? recordingFor(entry).map { Int($0.duration) } ?? 0
+    }
+    private func titleFor(_ entry: NoteListProjection.Row) -> String {
+        meetingFor(entry)?.title ?? recordingFor(entry)?.title ?? uploadFor(entry)?.title ?? "제목 없음"
+    }
+    private var displayedEntries: [NoteListProjection.Row] {
+        let allowed = Set(filtered.map(\.id))
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return allEntries.filter { entry in
+            if let m = meetingFor(entry) { return allowed.contains(m.id) }
+            guard filter == .all || filter == .pending else { return false }
+            return q.isEmpty || titleFor(entry).localizedCaseInsensitiveContains(q)
+        }.sorted { a, b in
+            if store.sortKey == .title {
+                let result = titleFor(a).localizedStandardCompare(titleFor(b))
+                return store.ascending ? result == .orderedAscending : result == .orderedDescending
+            }
+            func value(_ e: NoteListProjection.Row) -> Double {
+                let m = meetingFor(e), r = recordingFor(e), u = uploadFor(e)
+                switch store.sortKey {
+                case .duration: return Double(durationFor(e))
+                case .size: return Double(m?.fileSizeBytes ?? r?.fileSize ?? Int(u?.size ?? 0))
+                case .cost: return m?.costUsd ?? -1
+                default:
+                    let d = store.sortKey == .createdAt ? m?.createdAt : m?.recordedOrCreated
+                    return (d ?? r?.startedAt ?? u?.recordedAt ?? .distantPast).timeIntervalSince1970
+                }
+            }
+            if store.sortKey == .status {
+                let x = meetingFor(a)?.status ?? "pending", y = meetingFor(b)?.status ?? "pending"
+                if x != y { return store.ascending ? x < y : x > y }
+            }
+            let x = value(a), y = value(b)
+            return x == y ? a.id < b.id : (store.ascending ? x < y : x > y)
+        }
+    }
+    private var localRecordings: [Recording] {
+        displayedEntries.filter { meetingFor($0) == nil }.compactMap { recordingFor($0) }
+    }
+
+    @ViewBuilder private func projectedRow(_ entry: NoteListProjection.Row, selectable: Bool) -> some View {
+        if let m = meetingFor(entry) {
+            row(m, selectable: selectable)
+        } else if let r = recordingFor(entry), !selectable {
+            PendingRecordingListRow(recording: r, deletion: $deletion).selectionDisabled()
+        } else if let job = uploadFor(entry), !selectable {
+            UploadJobRow(job: job).selectionDisabled().listRowBackground(Color.mgBg2)
+        }
     }
 
     // MARK: 동작
@@ -494,13 +554,15 @@ struct MeetingListView: View {
     private func delete(_ ids: Set<Int>) async {
         deleting = true
         defer { deleting = false }
-        await withTaskGroup(of: Void.self) { g in
-            for id in ids { g.addTask { try? await API.shared.deleteMeeting(id) } }
+        var succeeded = Set<Int>()
+        for id in ids {
+            do { try await API.shared.deleteMeeting(id); succeeded.insert(id) }
+            catch { errorText = "삭제하지 못했습니다: \(error.localizedDescription)" }
         }
-        if let cur = router.meetingID, ids.contains(cur) { router.meetingID = nil }
-        store.remove(ids)
-        multi.removeAll()
-        selecting = false
+        if let cur = router.meetingID, succeeded.contains(cur) { router.meetingID = nil }
+        store.remove(succeeded)
+        multi.subtract(succeeded)
+        if multi.isEmpty { selecting = false }
         await store.refresh()
     }
 }
@@ -512,7 +574,7 @@ struct MeetingRow: View {
     @EnvironmentObject private var device: OnDeviceJobCenter
 
     var body: some View {
-        NoteRowContent(title: meeting.title) {
+        NoteRowContent(title: meeting.title, compact: !meeting.isSettled) {
             if let job = device.job(for: meeting.id) {
                 NoteRowMetadata(date: meeting.recordedOrCreated, duration: meeting.durationSeconds)
                 DeviceJobLine(job: job)
@@ -526,14 +588,14 @@ struct MeetingRow: View {
             } else {
                 NoteRowMetadata(date: meeting.recordedOrCreated, duration: meeting.durationSeconds, status: statusText)
             }
-            if !meeting.tags.isEmpty { TagRow(tags: meeting.tags) }
+            if meeting.isSettled && !meeting.tags.isEmpty { TagRow(tags: meeting.tags) }
         }
     }
 
     private var statusText: String? {
         if meeting.isCompressing { return "파일 준비 중" }
         if meeting.status == "pending" { return "받아쓰기 전" }
-        if meeting.isDone && meeting.aiAnalyzed == 0 { return "정리 중…" }
+        if let label = meeting.postProcessingLabel { return label + (meeting.needsPostProcessing ? " · 대본 보기" : "") }
         return nil
     }
 }
@@ -662,30 +724,28 @@ struct UploadJobRow: View {
     @EnvironmentObject private var uploads: UploadCenter
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: job.state == .failed ? "exclamationmark.triangle.fill" : "arrow.up.circle")
-                    .foregroundStyle(job.state == .failed ? Color.red : Color.accentMalgeul)
-                Text(job.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                Spacer()
-                if job.state == .uploading {
-                    Text("\(Int(job.progress * 100))%").font(.subheadline.weight(.bold)).monospacedDigit().foregroundStyle(.accentMalgeul)
-                }
-            }
+        NoteRowContent(title: job.title, compact: true) {
+            NoteRowMetadata(date: job.recordedAt, duration: nil)
             switch job.state {
             case .analyzing:
-                HStack(spacing: 6) { ProgressView().controlSize(.small); Text(job.message ?? "파일 분석 중").font(.caption).foregroundStyle(.secondary) }
+                HStack(spacing: 6) { ProgressView().controlSize(.mini); Text(job.message ?? "파일 준비 중") }
+                    .font(.system(size: 13)).foregroundStyle(Color.mgFg3)
             case .uploading:
-                ProgressView(value: job.progress)
-                Text("대용량 파일은 시간이 걸릴 수 있습니다 · \(Fmt.size(Int(job.size)))").font(.caption2).foregroundStyle(.secondary)
-            case .finishing:
-                HStack(spacing: 6) { ProgressView().controlSize(.small); Text("서버에 저장하는 중...").font(.caption).foregroundStyle(.secondary) }
-            case .failed:
-                Text(job.message ?? "업로드 실패").font(.caption).foregroundStyle(.red)
                 HStack {
-                    Button("다시 시도") { uploads.retry(job.id) }.buttonStyle(.bordered).controlSize(.small)
-                    Button("지우기", role: .destructive) { uploads.cancel(job.id) }.buttonStyle(.bordered).controlSize(.small)
-                }
+                    Text("업로드 중")
+                    Spacer()
+                    Text("\(Int(job.progress * 100))%").monospacedDigit()
+                }.font(.system(size: 13)).foregroundStyle(Color.mgFg3)
+                ProgressView(value: job.progress)
+            case .finishing:
+                HStack(spacing: 6) { ProgressView().controlSize(.mini); Text("서버에 저장 중") }
+                    .font(.system(size: 13)).foregroundStyle(Color.mgFg3)
+            case .failed:
+                Text(job.message ?? "업로드 실패").font(.system(size: 13)).foregroundStyle(Color.mgDanger)
+                HStack {
+                    Button("다시 시도") { uploads.retry(job.id) }.buttonStyle(.borderless)
+                    Button("업로드 취소") { uploads.cancel(job.id) }.buttonStyle(.borderless)
+                }.font(.system(size: 13))
             }
         }
         .swipeActions {
@@ -760,7 +820,7 @@ enum ListFilter: Equatable {
     var title: String {
         switch self {
         case .all: return "전체 노트"
-        case .pending: return "처리 전·중"
+        case .pending: return "녹음·처리 중"
         case .tag(let t): return "#\(t)"
         case .group(_, let n): return n
         }
@@ -774,6 +834,7 @@ private struct RecordFabButton: View {
     @EnvironmentObject private var recorder: Recorder
     @EnvironmentObject private var router: Router
     let onStart: () -> Void
+    let onUpload: () -> Void
 
     var body: some View {
         if recorder.isActive {
@@ -791,14 +852,20 @@ private struct RecordFabButton: View {
                 .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
             }
             .accessibilityLabel("녹음 화면 열기")
+            .contextMenu { Button(action: onUpload) { Label("파일 업로드", systemImage: "square.and.arrow.up") } }
         } else {
-            Button { onStart() } label: {
-                Label("녹음", systemImage: "mic.fill")
-                    .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                    .padding(.leading, 18).padding(.trailing, 22).frame(height: 52)
-                    .background(Color.accentMalgeul, in: Capsule())
-                    .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+            Menu {
+                Button(action: onStart) { Label("녹음", systemImage: "mic") }
+                Button(action: onUpload) { Label("파일 업로드", systemImage: "square.and.arrow.up") }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 24, weight: .medium)).foregroundStyle(.white)
+                    .frame(width: 56, height: 56)
+                    .background(Color.accentMalgeul, in: Circle())
+                    .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
             }
+            .accessibilityLabel("새로 추가")
+            .accessibilityIdentifier("new-note-button")
         }
     }
 }

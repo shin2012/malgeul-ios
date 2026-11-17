@@ -114,12 +114,12 @@ final class RecordingStore: ObservableObject {
         save()
     }
 
-    func markUploaded(_ id: String, meetingID: Int) {
+    func markUploaded(_ id: String, meetingID: Int, removeIfConfigured: Bool = true) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         items[i].meetingID = meetingID
         items[i].uploadedAt = .now
         save()
-        if AppConfig.shared.deleteAfterUpload { delete(id) }
+        if removeIfConfigured && AppConfig.shared.deleteAfterUpload { delete(id) }
     }
 
     func delete(_ id: String) {

@@ -21,18 +21,9 @@ struct RecordTabView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
 
-                Section {
-                    if recordings.items.isEmpty {
-                        Text("아직 녹음이 없습니다.").foregroundStyle(.secondary)
-                    }
-                    ForEach(recordings.items) { r in
-                        PendingRecordingListRow(recording: r, deletion: $deletion)
-                    }
-                } header: {
-                    Text("내 녹음")
-                } footer: {
-                    Text("녹음 파일은 이 기기의 ‘파일 › 나의 iPhone › 말글 › 녹음’에도 보관됩니다.")
-                }
+                Text("녹음을 끝내면 전체 목록에서 이어서 관리할 수 있어요.")
+                    .font(.system(size: 13)).foregroundStyle(Color.mgFg3)
+                    .frame(maxWidth: .infinity).listRowSeparator(.hidden)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -171,7 +162,7 @@ struct RecordingRow: View {
     @EnvironmentObject private var device: OnDeviceJobCenter
 
     var body: some View {
-        NoteRowContent(title: recording.title) {
+        NoteRowContent(title: recording.title, compact: true) {
             NoteRowMetadata(date: recording.startedAt, duration: Int(recording.duration), status: statusText)
             if let job = device.job(recording: recording.id) {
                 DeviceJobLine(job: job)
@@ -180,9 +171,14 @@ struct RecordingRow: View {
                     Text(job.message ?? "업로드 실패").foregroundStyle(Color.mgDanger)
                         .font(.system(size: 13.5)).lineLimit(2)
                 } else if job.state == .uploading {
+                    HStack {
+                        Text("업로드 중")
+                        Spacer()
+                        Text("\(Int(job.progress * 100))%").monospacedDigit()
+                    }.font(.system(size: 13)).foregroundStyle(Color.mgFg3)
                     ProgressView(value: job.progress).tint(Color.accentMalgeul)
                 } else {
-                    HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("업로드 준비 중") }
+                    HStack(spacing: 4) { ProgressView().controlSize(.mini); Text(job.state == .finishing ? "서버에 저장 중" : (job.message ?? "파일 준비 중")) }
                         .font(.system(size: 13.5)).foregroundStyle(Color.mgFg3)
                 }
             }

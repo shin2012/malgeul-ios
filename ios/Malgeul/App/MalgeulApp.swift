@@ -114,6 +114,10 @@ struct MalgeulApp: App {
     init() {
         #if DEBUG
         DebugRoute.apply()
+        // XCUITest fixture 초기화
+        if UserDefaults.standard.bool(forKey: "noteListUITest") {
+            installNoteUITestFixture(recordingStore: RecordingStore.shared)
+        }
         #endif
     }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates ios/Malgeul.xcodeproj (app + share extension + watch app + live activity widget, synchronized folders)."""
+"""Generates ios/Malgeul.xcodeproj (app + share extension + watch app + live activity widget + UI tests, synchronized folders)."""
 import os
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -110,6 +110,26 @@ def widget_settings() -> dict:
     }
 
 
+def uitest_settings() -> dict:
+    return {
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": '""',
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_FILE": '"Config/UITest-Info.plist"',
+        "INFOPLIST_KEY_CFBundleDisplayName": '"MalgeulUITests"',
+        "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t)',
+        "MARKETING_VERSION": "1.12.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}.ui-test"',
+        "PRODUCT_NAME": '"$(TARGET_NAME)"',
+        "SUPPORTED_PLATFORMS": '"iphoneos iphonesimulator"',
+        "SWIFT_EMIT_LOC_STRINGS": "YES",
+        "SWIFT_VERSION": "5.0",
+        "TARGETED_DEVICE_FAMILY": '"1,2"',
+        "TEST_TARGET_NAME": '"Malgeul"',
+    }
+
+
 def project_settings(debug: bool) -> dict:
     s = {
         "ALWAYS_SEARCH_USER_PATHS": "NO",
@@ -193,12 +213,14 @@ pbx = f"""// !$*UTF8*$!
 \t\t{I(0x20)} /* MalgeulShare.appex */ = {{isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MalgeulShare.appex; sourceTree = BUILT_PRODUCTS_DIR; }};
 \t\t{I(0x60)} /* MalgeulWatch.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MalgeulWatch.app; sourceTree = BUILT_PRODUCTS_DIR; }};
 \t\t{I(0x70)} /* MalgeulWidget.appex */ = {{isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MalgeulWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; }};
+\t\t{I(0x80)} /* MalgeulUITests.xctest */ = {{isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MalgeulUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; }};
 \t\t{I(0x7D)} /* Widget-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Widget-Info.plist"; sourceTree = "<group>"; }};
 \t\t{I(0x6D)} /* Watch-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Watch-Info.plist"; sourceTree = "<group>"; }};
 \t\t{I(0x0B)} /* Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; }};
 \t\t{I(0x0C)} /* Share-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Share-Info.plist"; sourceTree = "<group>"; }};
 \t\t{I(0x0D)} /* Malgeul.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Malgeul.entitlements; sourceTree = "<group>"; }};
 \t\t{I(0x0E)} /* Share.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Share.entitlements; sourceTree = "<group>"; }};
+\t\t{I(0x8F)} /* UITest-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "UITest-Info.plist"; sourceTree = "<group>"; }};
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -208,6 +230,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t{I(0x40)} /* Shared */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; }};
 \t\t{I(0x71)} /* MalgeulWidget */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulWidget; sourceTree = "<group>"; }};
 \t\t{I(0x7E)} /* LiveActivity */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = LiveActivity; sourceTree = "<group>"; }};
+\t\t{I(0x81)} /* MalgeulUITests */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulUITests; sourceTree = "<group>"; }};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -258,6 +281,13 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tremoteGlobalIDString = {I(0x75)};
 \t\t\tremoteInfo = MalgeulWidget;
 \t\t}};
+\t\t{I(0x82)} /* PBXContainerItemProxy */ = {{
+\t\t\tisa = PBXContainerItemProxy;
+\t\t\tcontainerPortal = {I(0x09)} /* Project object */;
+\t\t\tproxyType = 1;
+\t\t\tremoteGlobalIDString = {I(0x06)};
+\t\t\tremoteInfo = Malgeul;
+\t\t}};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
@@ -276,6 +306,11 @@ pbx = f"""// !$*UTF8*$!
 \t\t\ttarget = {I(0x75)} /* MalgeulWidget */;
 \t\t\ttargetProxy = {I(0x7B)} /* PBXContainerItemProxy */;
 \t\t}};
+\t\t{I(0x83)} /* PBXTargetDependency */ = {{
+\t\t\tisa = PBXTargetDependency;
+\t\t\ttarget = {I(0x06)} /* Malgeul */;
+\t\t\ttargetProxy = {I(0x82)} /* PBXContainerItemProxy */;
+\t\t}};
 /* End PBXTargetDependency section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -283,6 +318,7 @@ pbx = f"""// !$*UTF8*$!
 {phase(I(0x23), "PBXFrameworksBuildPhase", "Frameworks")}
 {phase(I(0x63), "PBXFrameworksBuildPhase", "Frameworks")}
 {phase(I(0x73), "PBXFrameworksBuildPhase", "Frameworks")}
+{phase(I(0x84), "PBXFrameworksBuildPhase", "Frameworks")}
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -295,6 +331,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x40)} /* Shared */,
 \t\t\t\t{I(0x71)} /* MalgeulWidget */,
 \t\t\t\t{I(0x7E)} /* LiveActivity */,
+\t\t\t\t{I(0x81)} /* MalgeulUITests */,
 \t\t\t\t{I(0x0A)} /* Config */,
 \t\t\t\t{I(0x05)} /* Products */,
 \t\t\t);
@@ -309,6 +346,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x0E)} /* Share.entitlements */,
 \t\t\t\t{I(0x6D)} /* Watch-Info.plist */,
 \t\t\t\t{I(0x7D)} /* Widget-Info.plist */,
+\t\t\t\t{I(0x8F)} /* UITest-Info.plist */,
 \t\t\t);
 \t\t\tpath = Config;
 \t\t\tsourceTree = "<group>";
@@ -320,6 +358,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x20)} /* MalgeulShare.appex */,
 \t\t\t\t{I(0x60)} /* MalgeulWatch.app */,
 \t\t\t\t{I(0x70)} /* MalgeulWidget.appex */,
+\t\t\t\t{I(0x80)} /* MalgeulUITests.xctest */,
 \t\t\t);
 \t\t\tname = Products;
 \t\t\tsourceTree = "<group>";
@@ -425,6 +464,29 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tproductReference = {I(0x70)} /* MalgeulWidget.appex */;
 \t\t\tproductType = "com.apple.product-type.app-extension";
 \t\t}};
+\t\t{I(0x85)} /* MalgeulUITests */ = {{
+\t\t\tisa = PBXNativeTarget;
+\t\t\tbuildConfigurationList = {I(0x88)} /* Build configuration list for PBXNativeTarget "MalgeulUITests" */;
+\t\t\tbuildPhases = (
+\t\t\t\t{I(0x86)} /* Sources */,
+\t\t\t\t{I(0x84)} /* Frameworks */,
+\t\t\t\t{I(0x87)} /* Resources */,
+\t\t\t);
+\t\t\tbuildRules = (
+\t\t\t);
+\t\t\tdependencies = (
+\t\t\t\t{I(0x83)} /* PBXTargetDependency */,
+\t\t\t);
+\t\t\tfileSystemSynchronizedGroups = (
+\t\t\t\t{I(0x81)} /* MalgeulUITests */,
+\t\t\t);
+\t\t\tname = MalgeulUITests;
+\t\t\tpackageProductDependencies = (
+\t\t\t);
+\t\t\tproductName = MalgeulUITests;
+\t\t\tproductReference = {I(0x80)} /* MalgeulUITests.xctest */;
+\t\t\tproductType = "com.apple.product-type.bundle.ui-testing";
+\t\t}};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -445,6 +507,9 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t\t\tCreatedOnToolsVersion = 16.0;
 \t\t\t\t\t}};
 \t\t\t\t\t{I(0x75)} = {{
+\t\t\t\t\t\tCreatedOnToolsVersion = 16.0;
+\t\t\t\t\t}};
+\t\t\t\t\t{I(0x85)} = {{
 \t\t\t\t\t\tCreatedOnToolsVersion = 16.0;
 \t\t\t\t\t}};
 \t\t\t\t}};
@@ -470,6 +535,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x25)} /* MalgeulShare */,
 \t\t\t\t{I(0x65)} /* MalgeulWatch */,
 \t\t\t\t{I(0x75)} /* MalgeulWidget */,
+\t\t\t\t{I(0x85)} /* MalgeulUITests */,
 \t\t\t);
 \t\t}};
 /* End PBXProject section */
@@ -479,6 +545,7 @@ pbx = f"""// !$*UTF8*$!
 {phase(I(0x24), "PBXResourcesBuildPhase", "Resources")}
 {phase(I(0x64), "PBXResourcesBuildPhase", "Resources")}
 {phase(I(0x74), "PBXResourcesBuildPhase", "Resources")}
+{phase(I(0x87), "PBXResourcesBuildPhase", "Resources")}
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -486,6 +553,7 @@ pbx = f"""// !$*UTF8*$!
 {phase(I(0x22), "PBXSourcesBuildPhase", "Sources")}
 {phase(I(0x62), "PBXSourcesBuildPhase", "Sources")}
 {phase(I(0x72), "PBXSourcesBuildPhase", "Sources")}
+{phase(I(0x86), "PBXSourcesBuildPhase", "Sources")}
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -499,6 +567,8 @@ pbx = f"""// !$*UTF8*$!
 {config(I(0x67), "Release", watch_settings())}
 {config(I(0x76), "Debug", widget_settings())}
 {config(I(0x77), "Release", widget_settings())}
+{config(I(0x89), "Debug", uitest_settings())}
+{config(I(0x8A), "Release", uitest_settings())}
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -543,6 +613,15 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tbuildConfigurations = (
 \t\t\t\t{I(0x76)} /* Debug */,
 \t\t\t\t{I(0x77)} /* Release */,
+\t\t\t);
+\t\t\tdefaultConfigurationIsVisible = 0;
+\t\t\tdefaultConfigurationName = Release;
+\t\t}};
+\t\t{I(0x88)} /* Build configuration list for PBXNativeTarget "MalgeulUITests" */ = {{
+\t\t\tisa = XCConfigurationList;
+\t\t\tbuildConfigurations = (
+\t\t\t\t{I(0x89)} /* Debug */,
+\t\t\t\t{I(0x8A)} /* Release */,
 \t\t\t);
 \t\t\tdefaultConfigurationIsVisible = 0;
 \t\t\tdefaultConfigurationName = Release;
@@ -599,8 +678,50 @@ scheme = f"""<?xml version="1.0" encoding="UTF-8"?>
 </Scheme>
 """
 
+scheme_uitest = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Scheme LastUpgradeVersion = "1600" version = "1.7">
+   <BuildAction parallelizeBuildables = "YES" buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry buildForTesting = "YES" buildForRunning = "NO" buildForProfiling = "NO" buildForArchiving = "NO" buildForAnalyzing = "YES">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "{I(0x85)}" BuildableName = "MalgeulUITests.xctest" BlueprintName = "MalgeulUITests" ReferencedContainer = "container:Malgeul.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry buildForTesting = "YES" buildForRunning = "YES" buildForProfiling = "YES" buildForArchiving = "YES" buildForAnalyzing = "YES">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "{I(0x06)}" BuildableName = "Malgeul.app" BlueprintName = "Malgeul" ReferencedContainer = "container:Malgeul.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
+         <TestableReference skipped = "NO" parallelizable = "YES">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "{I(0x85)}" BuildableName = "MalgeulUITests.xctest" BlueprintName = "MalgeulUITests" ReferencedContainer = "container:Malgeul.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
+      <MacroExpansion>
+         <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "{I(0x06)}" BuildableName = "Malgeul.app" BlueprintName = "Malgeul" ReferencedContainer = "container:Malgeul.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+   </TestAction>
+   <LaunchAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle = "0" useCustomWorkingDirectory = "NO" ignoresPersistentStateOnLaunch = "NO" debugDocumentVersioning = "YES" debugServiceExtension = "internal" allowLocationSimulation = "YES">
+      <BuildableProductRunnable runnableDebuggingMode = "0">
+         <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "{I(0x06)}" BuildableName = "Malgeul.app" BlueprintName = "Malgeul" ReferencedContainer = "container:Malgeul.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </LaunchAction>
+   <ProfileAction buildConfiguration = "Release" shouldUseLaunchSchemeArgsEnv = "YES" savedToolDirectoryChoice = "" useCustomWorkingDirectory = "NO" debugDocumentVersioning = "YES">
+   </ProfileAction>
+   <AnalyzeAction buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction buildConfiguration = "Release" revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>
+"""
+
 proj = os.path.join(ROOT, "Malgeul.xcodeproj")
 os.makedirs(os.path.join(proj, "xcshareddata", "xcschemes"), exist_ok=True)
 open(os.path.join(proj, "project.pbxproj"), "w").write(pbx)
 open(os.path.join(proj, "xcshareddata", "xcschemes", "Malgeul.xcscheme"), "w").write(scheme)
+open(os.path.join(proj, "xcshareddata", "xcschemes", "MalgeulUITests.xcscheme"), "w").write(scheme_uitest)
 print("ok")

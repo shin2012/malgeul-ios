@@ -3,18 +3,19 @@ import SwiftUI
 /// 서버 노트와 기기 녹음이 공유하는 제목·본문·행 간격.
 struct NoteRowContent<Details: View>: View {
     let title: String
+    var compact = false
     @ViewBuilder let details: () -> Details
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: compact ? 15 : 16, weight: .semibold))
                 .foregroundStyle(Color.mgFg)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             details()
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, compact ? 10 : 12)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -42,12 +43,34 @@ struct NoteRowMetadata: View {
     }
 }
 
-/// 모든 목록 행의 보조 동작은 같은 크기의 더 보기 버튼에 모은다.
+private struct NoteMenuDismissKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+extension EnvironmentValues {
+    var noteMenuDismiss: () -> Void {
+        get { self[NoteMenuDismissKey.self] }
+        set { self[NoteMenuDismissKey.self] = newValue }
+    }
+}
+
+/// 일반 동작은 팝오버를 닫고, 삭제는 확인이 끝날 때까지 같은 자리에 남긴다.
+struct NoteActionButton<LabelContent: View>: View {
+    @Environment(\.noteMenuDismiss) private var close
+    let action: () -> Void
+    @ViewBuilder let label: () -> LabelContent
+    var body: some View {
+        Button { close(); action() } label: { label().frame(maxWidth: .infinity, minHeight: 44, alignment: .leading) }
+    }
+}
+
+/// 첫 삭제 누름에 자동으로 닫히는 시스템 Menu 대신 지속되는 앵커 팝오버.
 struct NoteRowMenu<Actions: View>: View {
+    var onClose: () -> Void = {}
     @ViewBuilder let actions: () -> Actions
+    @State private var open = false
 
     var body: some View {
-        Menu { actions() } label: {
+        Button { open.toggle() } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(Color.mgFg3)
@@ -55,7 +78,19 @@ struct NoteRowMenu<Actions: View>: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .menuStyle(.button)
         .accessibilityLabel("노트 메뉴")
+        .accessibilityIdentifier("note-menu")
+        .popover(isPresented: $open, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 0) { actions() }
+                .frame(width: 260, alignment: .leading)
+                .padding(12)
+            .fixedSize(horizontal: true, vertical: true)
+            .font(.system(size: 14))
+            .foregroundStyle(Color.mgFg2)
+            .buttonStyle(.borderless)
+            .environment(\.noteMenuDismiss, { open = false })
+            .presentationCompactAdaptation(.popover)
+            .onDisappear { onClose() }
+        }
     }
 }

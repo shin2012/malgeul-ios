@@ -98,6 +98,8 @@ struct Meeting: Decodable, Identifiable, Hashable {
     var segmentCount: Int?
     var tags: [String]
     var groupId: Int?
+    var speakerIdStatus: String?
+    var processingPhase: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyKey.self)
@@ -114,6 +116,8 @@ struct Meeting: Decodable, Identifiable, Hashable {
         costUsd = c.double("cost_usd")
         errorMessage = c.str("error_message")
         aiAnalyzed = c.int("ai_analyzed")
+        speakerIdStatus = c.str("speaker_id_status")
+        processingPhase = c.str("processing_phase")
         audioReady = c.int("audio_ready")
         createdAt = c.date("created_at")
         recordedAt = c.date("recorded_at")
@@ -132,6 +136,20 @@ struct Meeting: Decodable, Identifiable, Hashable {
     var isProcessing: Bool { status == "processing" }
     var isCompressing: Bool { audioReady == 0 }
     var recordedOrCreated: Date? { recordedAt ?? createdAt }
+    var needsPostProcessing: Bool {
+        guard isDone else { return false }
+        return ["analyzing", "speaker_waiting", "speaker_processing"].contains(processingPhase ?? "")
+            || ["queued", "processing"].contains(speakerIdStatus ?? "")
+    }
+    var isSettled: Bool { isDone && !needsPostProcessing }
+    var postProcessingLabel: String? {
+        if processingPhase == "analyzing" { return "제목·태그 정리 중" }
+        if speakerIdStatus == "processing" || processingPhase == "speaker_processing" { return "화자 추정 중" }
+        if speakerIdStatus == "queued" || processingPhase == "speaker_waiting" { return "화자 추정 대기 중" }
+        if needsPostProcessing { return "제목·태그 정리 중" }
+        if speakerIdStatus == "error" { return "화자 추정 실패 · 대본은 볼 수 있어요" }
+        return nil
+    }
 }
 
 struct Segment: Decodable, Identifiable, Hashable {

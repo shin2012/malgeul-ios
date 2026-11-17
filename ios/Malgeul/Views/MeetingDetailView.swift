@@ -62,14 +62,6 @@ struct MeetingDetailView: View {
 
     var body: some View {
         dialogs2(dialogs1(content))
-            .safeAreaInset(edge: .bottom) {
-                if deletion.isArmed("detail-\(meetingID)") {
-                    TwoTapDeleteButton(target: "detail-\(meetingID)", confirmation: $deletion) {
-                        Task { await deleteMeeting() }
-                    }
-                    .padding(12).frame(maxWidth: .infinity).background(Color.white)
-                }
-            }
             .onDisappear { deletion.reset() }
     }
 
@@ -166,6 +158,26 @@ struct MeetingDetailView: View {
             if !m.tags.isEmpty {
                 Text(m.tags.map { "#\($0)" }.joined(separator: "  "))
                     .font(.system(size: 13.5)).foregroundStyle(Color.mgFg2).lineLimit(2)
+            }
+            let current = store.meetings.first { $0.id == meetingID } ?? m
+            if let status = current.postProcessingLabel {
+                HStack(alignment: .top, spacing: 8) {
+                    if current.needsPostProcessing { ProgressView().controlSize(.mini) }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(status).fontWeight(.medium)
+                        if current.needsPostProcessing {
+                            Text("대본은 바로 읽을 수 있어요. 끝나면 이름에 반영됩니다.")
+                                .font(.system(size: 12)).foregroundStyle(Color.mgFg3)
+                        }
+                    }
+                    if current.speakerIdStatus == "error" {
+                        Button("다시 시도") { Task { await doc.rerunSpeaker(); await store.refresh() } }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                .font(.system(size: 13)).foregroundStyle(Color.mgFg2)
+                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.mgBg2, in: RoundedRectangle(cornerRadius: 8))
             }
         }
         .padding(.horizontal, 20)
@@ -308,32 +320,32 @@ struct MeetingDetailView: View {
     }
 
     private var moreMenu: some View {
-        Menu {
-            Button { beginRenameTitle() } label: { Label("제목 바꾸기", systemImage: "pencil") }
-            Button { editingDate = meeting } label: { Label("녹음 시각 바꾸기", systemImage: "calendar") }
-            Button { showSpeakers = true } label: { Label("참석자 · 대화 점유율", systemImage: "person.2") }
+        NoteRowMenu(onClose: { deletion.reset() }) {
+            NoteActionButton { beginRenameTitle() } label: { Label("제목 바꾸기", systemImage: "pencil") }
+            NoteActionButton { editingDate = meeting } label: { Label("녹음 시각 바꾸기", systemImage: "calendar") }
+            NoteActionButton { showSpeakers = true } label: { Label("참석자 · 대화 점유율", systemImage: "person.2") }
             Divider()
-            Button {
+            NoteActionButton {
                 UIPasteboard.general.string = transcriptText()
                 showToast("대화 내용을 복사했습니다")
             } label: { Label("대화 내용 복사", systemImage: "doc.on.doc") }
-            Button { shareText() } label: { Label("대화 내용 저장 (.txt)", systemImage: "square.and.arrow.down") }
-            Button { shareAudio() } label: { Label("녹음 파일 저장", systemImage: "waveform") }
+            NoteActionButton { shareText() } label: { Label("대화 내용 저장 (.txt)", systemImage: "square.and.arrow.down") }
+            NoteActionButton { shareAudio() } label: { Label("녹음 파일 저장", systemImage: "waveform") }
             Divider()
             if AppConfig.deviceTranscribeAvailable {
-                Button { confirmRedo = true } label: { Label("이 기기에서 다시 받아쓰기", systemImage: "iphone.and.arrow.forward") }
+                NoteActionButton { confirmRedo = true } label: { Label("이 기기에서 다시 받아쓰기", systemImage: "iphone.and.arrow.forward") }
             }
-            Button {
+            NoteActionButton {
                 device.requestNotificationPermission()
                 device.enqueueSpeakers(meetingID: meetingID, title: meeting?.title ?? "")
                 showToast("기기에서 화자를 다시 추정합니다")
             } label: { Label("기기 목소리로 화자 다시 추정", systemImage: "person.wave.2") }
             Divider()
-            Button {
-                if deletion.tap("detail-\(meetingID)") { Task { await deleteMeeting() } }
-            } label: { Label("삭제", systemImage: "trash") }
-        } label: {
-            Image(systemName: "ellipsis")
+            TwoTapDeleteButton(target: "detail-\(meetingID)", confirmation: $deletion) {
+                Task { await deleteMeeting() }
+            }
+            Text("서버의 노트와 음성을 삭제합니다.")
+                .font(.system(size: 12)).foregroundStyle(Color.mgFg3)
         }
         .accessibilityLabel("더 보기")
     }
@@ -424,11 +436,13 @@ struct MeetingDetailView: View {
     }
 
     private func deleteMeeting() async {
-        player.leaveMeeting(meetingID)
-        try? await API.shared.deleteMeeting(meetingID)
-        store.remove([meetingID])
-        router.meetingID = nil
-        await store.refresh()
+        do {
+            try await API.shared.deleteMeeting(meetingID)
+            player.leaveMeeting(meetingID)
+            store.remove([meetingID])
+            router.meetingID = nil
+            await store.refresh()
+        } catch { showToast("삭제하지 못했습니다: \(error.localizedDescription)") }
     }
 
     private func load() async {
