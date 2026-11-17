@@ -453,32 +453,34 @@ struct MeetingListView: View {
     private var displayedEntries: [NoteListProjection.Row] {
         let allowed = Set(filtered.map(\.id))
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sortKey = store.sortKey
+        let ascending = store.ascending
         return allEntries.filter { entry in
             if let m = meetingFor(entry) { return allowed.contains(m.id) }
             guard filter == .all || filter == .pending else { return false }
             return q.isEmpty || titleFor(entry).localizedCaseInsensitiveContains(q)
         }.sorted { a, b in
-            if store.sortKey == .title {
+            if sortKey == .title {
                 let result = titleFor(a).localizedStandardCompare(titleFor(b))
-                return store.ascending ? result == .orderedAscending : result == .orderedDescending
+                return ascending ? result == .orderedAscending : result == .orderedDescending
             }
             func value(_ e: NoteListProjection.Row) -> Double {
                 let m = meetingFor(e), r = recordingFor(e), u = uploadFor(e)
-                switch store.sortKey {
+                switch sortKey {
                 case .duration: return Double(durationFor(e))
                 case .size: return Double(m?.fileSizeBytes ?? r?.fileSize ?? Int(u?.size ?? 0))
                 case .cost: return m?.costUsd ?? -1
                 default:
-                    let d = store.sortKey == .createdAt ? m?.createdAt : m?.recordedOrCreated
+                    let d = sortKey == .createdAt ? m?.createdAt : m?.recordedOrCreated
                     return (d ?? r?.startedAt ?? u?.recordedAt ?? .distantPast).timeIntervalSince1970
                 }
             }
-            if store.sortKey == .status {
+            if sortKey == .status {
                 let x = meetingFor(a)?.status ?? "pending", y = meetingFor(b)?.status ?? "pending"
-                if x != y { return store.ascending ? x < y : x > y }
+                if x != y { return ascending ? x < y : x > y }
             }
             let x = value(a), y = value(b)
-            return x == y ? a.id < b.id : (store.ascending ? x < y : x > y)
+            return x == y ? a.id < b.id : (ascending ? x < y : x > y)
         }
     }
     private var localRecordings: [Recording] {
