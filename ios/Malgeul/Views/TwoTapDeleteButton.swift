@@ -56,7 +56,6 @@ struct PendingRecordingListRow: View {
                 NoteRowMenu(onClose: { deletion.reset() }) { actions }.padding(.top, 2)
             }
         }
-        .accessibilityIdentifier("local-recording-" + recording.id)
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listRowBackground(Color.mgBg2)
         .listRowSeparatorTint(Color.mgLine)

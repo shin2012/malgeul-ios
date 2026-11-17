@@ -20,6 +20,7 @@ final class MalgeulNoteListDeletionTests: XCTestCase {
     }
     private func verifySameButton(_ button: XCUIElement, prefix: String) {
         XCTAssertTrue(button.waitForExistence(timeout: 5))
+        XCTAssertTrue(button.isHittable, "보이는 삭제 버튼이 실제로 눌려야 한다")
         let before = button.frame
         XCTAssertGreaterThan(before.width, 40)
         capture(prefix + "-before")

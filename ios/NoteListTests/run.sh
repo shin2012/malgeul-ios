@@ -8,3 +8,4 @@ fi
 OUT="${TMPDIR:?}/malgeul-note-list-tests"
 "$S" Malgeul/Core/Models.swift Malgeul/Core/NoteListProjection.swift NoteListTests/main.swift -o "$OUT"
 "$OUT"
+python3 NoteListTests/store_test.py "$S"

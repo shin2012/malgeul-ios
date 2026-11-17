@@ -17,7 +17,7 @@ for prefix, name in [('iPhone','phone'),('iPad Pro','ipad')]:
     result=out/(name+'.xcresult')
     args=['xcodebuild','-project','Malgeul.xcodeproj','-scheme','MalgeulUITests',
           '-configuration','Debug','-destination','platform=iOS Simulator,id='+d['udid'],
-          '-derivedDataPath',str(out/'derived'),'-clonedSourcePackagesDirPath',os.environ['RUNNER_TEMP']+'/spm',
+          '-derivedDataPath',str(out.parent/'note-derived'),'-clonedSourcePackagesDirPath',os.environ['RUNNER_TEMP']+'/spm',
           '-resultBundlePath',str(result),'-parallel-testing-enabled','NO',
           'CODE_SIGNING_ALLOWED=NO','-IDEBuildingContinueBuildingAfterErrors=YES','test']
     print('TEST',name,d['name'],flush=True)

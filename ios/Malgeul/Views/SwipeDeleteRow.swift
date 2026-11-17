@@ -16,7 +16,6 @@ struct SwipeDeleteRow<Content: View>: View {
         content()
             .frame(maxWidth: .infinity)
             .background(background)
-            .allowsHitTesting(offset == 0)
             .offset(x: offset)
             .background(alignment: .trailing) {
                 Button {

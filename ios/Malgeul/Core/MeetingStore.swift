@@ -50,6 +50,16 @@ final class MeetingStore: ObservableObject {
         linkDisplay(m.id, to: displayID)
         update(m)
         recentUploads.insert(m.id)
+        var ids = Set(UserDefaults.standard.stringArray(forKey: "noteUploadReceipts") ?? [])
+        ids.insert(String(m.id))
+        UserDefaults.standard.set(Array(ids), forKey: "noteUploadReceipts")
+        // 새 업로드가 서버 목록에 포함되기 전 앱이 종료되어도 행을 복원한다.
+        if var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            object.removeValue(forKey: "transcript_json")
+            if let receipt = try? JSONSerialization.data(withJSONObject: object) {
+                DiskCache.save(receipt, key: "upload_receipt_\(m.id)")
+            }
+        }
         schedulePolling()
         return true
     }
@@ -68,6 +78,13 @@ final class MeetingStore: ObservableObject {
             loaded = true
         }
         if let d = DiskCache.load(key: "groups"), let g = try? JSONDecoder().decode([MeetingGroup].self, from: d) { groups = g }
+        for rawID in UserDefaults.standard.stringArray(forKey: "noteUploadReceipts") ?? [] {
+            if let id = Int(rawID), let d = DiskCache.load(key: "upload_receipt_\(id)"),
+               let m = try? JSONDecoder().decode(Meeting.self, from: d) {
+                recentUploads.insert(id)
+                if !meetings.contains(where: { $0.id == id }) { meetings.insert(m, at: 0) }
+            }
+        }
     }
 
     func loadGroups() async {
@@ -77,7 +94,9 @@ final class MeetingStore: ObservableObject {
     /// 로그아웃 시 화면·캐시 비움
     func clear() {
         pollTask?.cancel(); pollTask = nil
+        for id in recentUploads { DiskCache.remove(key: "upload_receipt_\(id)") }
         recentUploads = []; displayAliases = [:]
+        UserDefaults.standard.removeObject(forKey: "noteUploadReceipts")
         UserDefaults.standard.removeObject(forKey: "noteDisplayAliases")
         meetings = []; groups = []; loaded = false
         DiskCache.remove(key: "meetings"); DiskCache.remove(key: "groups")
@@ -91,7 +110,9 @@ final class MeetingStore: ObservableObject {
             let ids = Set(list.map(\.id))
             let retained = meetings.filter { recentUploads.contains($0.id) && !ids.contains($0.id) }
             meetings = list + retained
+            for id in recentUploads.intersection(ids) { DiskCache.remove(key: "upload_receipt_\(id)") }
             recentUploads.subtract(ids)
+            UserDefaults.standard.set(recentUploads.map(String.init), forKey: "noteUploadReceipts")
             lastError = nil
         } catch {
             if !error.isCancellation { lastError = error.localizedDescription }
