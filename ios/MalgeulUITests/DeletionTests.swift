@@ -44,7 +44,11 @@ final class MalgeulNoteListDeletionTests: XCTestCase {
         waitForExpectations(timeout: 6)
         XCTAssertTrue(row.exists, "4초가 지나도 행과 펼친 삭제 버튼이 유지된다")
         // 첫 누름 보존·좌표·만료는 위에서 검증했다. 깊은 AX 조회 지연 없이 같은 버튼에 두 탭을 보낸다.
-        button.doubleTap()
+        let point = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: before.midX, dy: before.midY))
+        point.tap()
+        Thread.sleep(forTimeInterval: 0.4)
+        point.tap()
         let removed = NSPredicate(format: "exists == false")
         expectation(for: removed, evaluatedWith: row)
         waitForExpectations(timeout: 5)

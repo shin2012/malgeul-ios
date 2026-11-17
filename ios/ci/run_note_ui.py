@@ -10,10 +10,16 @@ out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j']))['devices']
 all_devices = [d for runtime, group in devices.items() if 'iOS' in runtime for d in group]
 results=[]
+selected=sys.argv[2:] or ['phone','ipad']
 for prefix, name in [('iPhone','phone'),('iPad Pro','ipad')]:
+    if name not in selected: continue
     candidates=[d for d in all_devices if d['name'].startswith(prefix)]
     if not candidates: raise RuntimeError('시뮬레이터 없음: '+prefix)
     d=sorted(candidates,key=lambda d:d['name'])[-1]
+    subprocess.run(['xcrun','simctl','shutdown','all'],check=False,timeout=90)
+    subprocess.run(['xcrun','simctl','boot',d['udid']],check=True,timeout=90)
+    subprocess.run(['xcrun','simctl','bootstatus',d['udid'],'-b'],check=True,timeout=240)
+    subprocess.run(['xcrun','simctl','io',d['udid'],'screenshot',str(out/(name+'-boot.png'))],check=True,timeout=60)
     result=out/(name+'.xcresult')
     args=['xcodebuild','-project','Malgeul.xcodeproj','-scheme','MalgeulUITests',
           '-configuration','Debug','-destination','platform=iOS Simulator,id='+d['udid'],

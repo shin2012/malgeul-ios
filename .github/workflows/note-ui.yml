@@ -3,6 +3,10 @@ on:
   workflow_dispatch:
 jobs:
   notes:
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [phone, ipad]
     runs-on: macos-26
     timeout-minutes: 40
     steps:
@@ -30,11 +34,11 @@ jobs:
           done
           exit 1
       - name: 아이폰·아이패드 실제 UI 시험
-        run: python3 ios/ci/run_note_ui.py "$RUNNER_TEMP/note-verification"
+        run: python3 ios/ci/run_note_ui.py "$RUNNER_TEMP/note-verification" "${{ matrix.device }}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: note-verification
+          name: note-verification-${{ matrix.device }}
           path: |
             ${{ runner.temp }}/note-verification
             ${{ runner.temp }}/mock.log
