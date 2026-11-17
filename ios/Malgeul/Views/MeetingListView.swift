@@ -349,7 +349,13 @@ struct MeetingListView: View {
                             if m.groupId == g.id { Label(g.name, systemImage: "checkmark") } else { Text(g.name) }
                         }
                     }
-                } label: { Label("그룹 옮기기", systemImage: "folder") }
+                    .labelStyle(.titleAndIcon)
+                } label: {
+                    Label("그룹 옮기기", systemImage: "folder")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
             Divider()
             TwoTapDeleteButton(target: "meeting-\(m.id)", confirmation: $deletion) {

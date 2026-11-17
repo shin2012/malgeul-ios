@@ -53,13 +53,29 @@ extension EnvironmentValues {
     }
 }
 
+/// 모든 팝오버 항목이 같은 아이콘 열과 44포인트 터치 행을 사용한다.
+struct NoteMenuLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 12) {
+            configuration.icon.frame(width: 22, alignment: .center)
+            configuration.title.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
 /// 일반 동작은 팝오버를 닫고, 삭제는 확인이 끝날 때까지 같은 자리에 남긴다.
 struct NoteActionButton<LabelContent: View>: View {
     @Environment(\.noteMenuDismiss) private var close
     let action: () -> Void
     @ViewBuilder let label: () -> LabelContent
     var body: some View {
-        Button { close(); action() } label: { label().frame(maxWidth: .infinity, minHeight: 44, alignment: .leading) }
+        Button { close(); action() } label: {
+            label().frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -87,7 +103,8 @@ struct NoteRowMenu<Actions: View>: View {
             .fixedSize(horizontal: true, vertical: true)
             .font(.system(size: 14))
             .foregroundStyle(Color.mgFg2)
-            .buttonStyle(.borderless)
+            .labelStyle(NoteMenuLabelStyle())
+            .buttonStyle(.plain)
             .environment(\.noteMenuDismiss, { open = false })
             .presentationCompactAdaptation(.popover)
             .onDisappear { onClose() }

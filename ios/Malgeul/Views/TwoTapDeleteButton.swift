@@ -16,12 +16,12 @@ struct TwoTapDeleteButton: View {
                 Label("한 번 더 눌러 삭제", systemImage: "trash").hidden().accessibilityHidden(true)
                 Label(confirmation.isArmed(target) ? "한 번 더 눌러 삭제" : title, systemImage: "trash")
             }
-            .font(.system(size: 13, weight: .medium))
+            .font(.system(size: 14, weight: .medium))
             .foregroundStyle(Color.mgDanger)
-            .frame(minHeight: 44, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .accessibilityIdentifier("delete-confirm-button")
         .task(id: confirmation.target) {
             guard confirmation.target == target else { return }

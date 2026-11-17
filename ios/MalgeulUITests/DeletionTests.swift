@@ -86,9 +86,14 @@ final class MalgeulNoteListDeletionTests: XCTestCase {
     }
     private func tapTrailingArea(_ button: XCUIElement) {
         XCTAssertTrue(button.waitForExistence(timeout: 5))
+        let reference = serverButton("제목 수정")
+        XCTAssertTrue(reference.exists)
+        let menuWidth = reference.frame.width
         let frame = button.frame
-        app.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: frame.minX + frame.width * 0.85, dy: frame.midY)).tap()
+        // 글자 크기가 아닌 메뉴 전체 너비와 최소 44포인트 행의 빈 부분을 누른다.
+        let point = CGVector(dx: frame.minX + menuWidth * 0.85,
+                             dy: frame.minY + max(44, frame.height) / 2)
+        app.coordinate(withNormalizedOffset: .zero).withOffset(point).tap()
     }
     func testServerNotePopoverMenuFrames() {
         openServerMenu()
@@ -122,7 +127,7 @@ final class MalgeulNoteListDeletionTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["녹음 시각 수정"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.alerts["제목 수정"].exists)
         capture("server-date-correct-target")
-        app.buttons["취소"].tap()
+        app.navigationBars["녹음 시각 수정"].buttons["취소"].tap()
     }
     func testServerNoteMenuGroupSelectionSubmenu() {
         openServerMenu(); tapTrailingArea(serverButton("그룹 옮기기"))
