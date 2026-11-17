@@ -18,11 +18,17 @@ def sim(*args):
     return p.stdout.strip()
 
 devices = json.loads(sim('list', 'devices', 'available', '-j'))['devices']
-phones = [d for runtime, group in devices.items() if 'iOS' in runtime for d in group if d['name'].startswith('iPhone')]
+runtimes = json.loads(sim('list', 'runtimes', '-j'))['runtimes']
+runtime = max((r for r in runtimes if r.get('isAvailable') and 'iOS' in r['identifier']),
+              key=lambda r: tuple(int(v) for v in r['version'].split('.')))
+print('RUNTIME', runtime['identifier'], flush=True)
+current_devices = devices[runtime['identifier']]
+phones = [d for d in current_devices if d['name'].startswith('iPhone')]
 udid = phones[0]['udid']
 print('DEVICE', phones[0]['name'], udid, flush=True)
 try:
     if phones[0]['state'] != 'Booted': sim('boot', udid)
+    subprocess.run(['open','-a','Simulator','--args','-CurrentDeviceUDID',udid],check=True,timeout=60)
     sim('bootstatus', udid, '-b')
     sim('install', udid, app)
     sim('privacy', udid, 'grant', 'microphone', bundle)
@@ -59,11 +65,12 @@ finally:
     sim('shutdown', udid)
 
 # 아일랜드 없는 아이패드에서는 같은 미리보기와 기존 잠금 화면 카드의 회귀를 확인한다.
-ipads = [d for runtime, group in devices.items() if 'iOS' in runtime for d in group if d['name'].startswith('iPad Pro')]
+ipads = [d for d in current_devices if d['name'].startswith('iPad Pro')]
 assert ipads, '아이패드 시뮬레이터가 없음'
 ipad = ipads[0]['udid']
 try:
     if ipads[0]['state'] != 'Booted': sim('boot', ipad)
+    subprocess.run(['open','-a','Simulator','--args','-CurrentDeviceUDID',ipad],check=True,timeout=60)
     sim('bootstatus', ipad, '-b')
     sim('install', ipad, app)
     for screen in ['live', 'livedark']:
