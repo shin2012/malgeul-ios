@@ -10,6 +10,10 @@ let rows = NoteListProjection.rows(locals: locals, uploads: uploads, meetingIDs:
 expect(rows.count == 1, "업로드 작업과 기기 녹음은 한 행")
 expect(rows[0].recordingID == "audio.m4a" && rows[0].uploadID == "job-1", "원래 녹음 행에 작업 연결")
 expect(rows[0].id == "local-audio.m4a", "업로드 시작 전후 표시 ID 유지")
+let duplicateJobs = [NoteListProjection.Upload(id: "job-1", recordingID: "audio.m4a", meetingID: nil),
+                     NoteListProjection.Upload(id: "job-2", recordingID: "audio.m4a", meetingID: nil)]
+expect(NoteListProjection.rows(locals: locals, uploads: duplicateJobs, meetingIDs: [], aliases: [:]).count == 1, "같은 녹음의 업로드 작업이 둘이어도 표시 행은 하나")
+expect(NoteListProjection.rows(locals: [], uploads: duplicateJobs, meetingIDs: [], aliases: [:]).count == 1, "로컬 목록이 없어도 동일 recordingID 작업을 한 행으로 합침")
 let linked = [NoteListProjection.Local(id: "audio.m4a", meetingID: 10)]
 let server = NoteListProjection.rows(locals: linked, uploads: [], meetingIDs: [10], aliases: [:])
 expect(server.count == 1 && server[0].meetingID == 10, "업로드 완료 후 서버 행과 중복 없음")

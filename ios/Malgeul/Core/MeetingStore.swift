@@ -131,7 +131,12 @@ final class MeetingStore: ObservableObject {
         if let i = meetings.firstIndex(where: { $0.id == id }) { change(&meetings[i]) }
     }
 
-    func remove(_ ids: Set<Int>) { meetings.removeAll { ids.contains($0.id) } }
+    func remove(_ ids: Set<Int>) {
+        meetings.removeAll { ids.contains($0.id) }
+        for id in ids { DiskCache.remove(key: "upload_receipt_\(id)") }
+        recentUploads.subtract(ids)
+        UserDefaults.standard.set(recentUploads.map(String.init), forKey: "noteUploadReceipts")
+    }
 
     /// 전사·분석·화자 추정이 남아 있는 동안만 공통 목록을 갱신한다.
     private func schedulePolling() {

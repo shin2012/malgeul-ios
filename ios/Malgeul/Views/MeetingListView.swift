@@ -425,8 +425,11 @@ struct MeetingListView: View {
     }
 
     private var allEntries: [NoteListProjection.Row] {
-        NoteListProjection.rows(
-            locals: recordings.items.map { .init(id: $0.id, meetingID: $0.meetingID) },
+        let serverIDs = Set(store.meetings.map(\.id))
+        return NoteListProjection.rows(
+            locals: recordings.items.filter { r in
+                r.meetingID == nil || !store.loaded || store.lastError != nil || r.meetingID.map { serverIDs.contains($0) } == true
+            }.map { .init(id: $0.id, meetingID: $0.meetingID) },
             uploads: uploads.jobs.map { .init(id: $0.id.uuidString, recordingID: $0.recordingID, meetingID: $0.meetingID) },
             meetingIDs: store.sorted(store.meetings).map(\.id), aliases: store.displayAliases)
     }
