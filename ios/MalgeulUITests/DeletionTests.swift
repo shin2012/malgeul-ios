@@ -134,7 +134,7 @@ final class MalgeulNoteListDeletionTests: XCTestCase {
     }
     func testServerNoteMenuTouchOutsideArea() {
         openServerMenu()
-        app.coordinate(withNormalizedOffset: CGPoint(x: 0.05, y: 0.08)).tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.08)).tap()
         XCTAssertFalse(app.buttons["delete-confirm-button"].exists)
         XCTAssertTrue(serverNoteRow.exists)
         capture("server-outside-no-delete")
