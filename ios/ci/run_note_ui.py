@@ -33,4 +33,4 @@ for prefix, name in [('iPhone','phone'),('iPad Pro','ipad')]:
     if result.exists():
         subprocess.run(['xcrun','xcresulttool','export','attachments','--path',str(result),'--output-path',str(out/(name+'-attachments'))],check=False)
     subprocess.run(['xcrun','simctl','shutdown',d['udid']],check=False)
-    if code: raise SystemExit(code)
+if any(r['exit_code'] for r in results): raise SystemExit(1)
