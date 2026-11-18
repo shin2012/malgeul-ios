@@ -13,9 +13,16 @@ out.mkdir(parents=True, exist_ok=True)
 bundle = 'kr.b-612.malgeul'
 
 def sim(*args):
-    p = subprocess.run(['xcrun', 'simctl', *args], check=True, text=True, capture_output=True,
-                       timeout=600 if args[0] == 'bootstatus' else 120)
-    return p.stdout.strip()
+    # CI 러너에서 두 번째 시뮬레이터(아이패드)의 install/launch가 120초를 넘기는 일이 반복됨 → 시간 늘리고 한 번 재시도
+    slow = args[0] in ('install', 'launch')
+    timeout = 600 if args[0] == 'bootstatus' else (300 if slow else 120)
+    for attempt in range(2 if slow else 1):
+        try:
+            p = subprocess.run(['xcrun', 'simctl', *args], check=True, text=True, capture_output=True, timeout=timeout)
+            return p.stdout.strip()
+        except subprocess.TimeoutExpired:
+            if attempt == 1 or not slow: raise
+            print('RETRY', args[0], flush=True)
 
 devices = json.loads(sim('list', 'devices', 'available', '-j'))['devices']
 runtimes = json.loads(sim('list', 'runtimes', '-j'))['runtimes']
