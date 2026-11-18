@@ -680,6 +680,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.13.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "kr.b-612.malgeul";
+				EXECUTABLE_NAME = Malgeul;
 				PRODUCT_MODULE_NAME = MalgeulMac;
 				PRODUCT_NAME = "말글";
 				SDKROOT = macosx;
@@ -714,6 +715,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.13.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "kr.b-612.malgeul";
+				EXECUTABLE_NAME = Malgeul;
 				PRODUCT_MODULE_NAME = MalgeulMac;
 				PRODUCT_NAME = "말글";
 				SDKROOT = macosx;

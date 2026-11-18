@@ -101,6 +101,7 @@ def mac_settings() -> dict:
         "MACOSX_DEPLOYMENT_TARGET": MAC_DEPLOY,
         "MARKETING_VERSION": VERSION,
         "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}"',
+        "EXECUTABLE_NAME": "Malgeul",
         "PRODUCT_MODULE_NAME": "MalgeulMac",
         "PRODUCT_NAME": '"말글"',
         "SDKROOT": "macosx",
