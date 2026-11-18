@@ -7,6 +7,25 @@ I = lambda n: f"1A00000000000000000000{n:02X}"
 
 APP_ID = "kr.b-612.malgeul"
 DEPLOY = "18.0"
+MAC_DEPLOY = "26.0"
+
+
+def _current_version() -> str:
+    """ios_bump.sh가 pbxproj에서 올린 버전을 유지 (다시 생성해도 되돌아가지 않게)"""
+    import re
+    try:
+        m = re.search(r"MARKETING_VERSION = ([0-9.]+);", open(os.path.join(ROOT, "Malgeul.xcodeproj", "project.pbxproj")).read())
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    return "1.0.0"
+
+
+VERSION = _current_version()
+MAC_EXCLUDE = ["Core/LiveRecording.swift", "Core/MalgeulAppShortcutsProvider.swift", "Core/RecordingSelfTest.swift",
+               "Core/WatchLink.swift", "Views/LivePreviewView.swift"]
+MAC_EXCLUDE_LINES = "".join(f"\t\t\t\t{f},\n" for f in MAC_EXCLUDE)
 
 common_target = lambda extra: "\n".join(f"\t\t\t\t{k} = {v};" for k, v in extra.items())
 
@@ -32,7 +51,7 @@ def target_settings(kind: str) -> dict:
             "INFOPLIST_KEY_LSApplicationCategoryType": '"public.app-category.productivity"',
             "INFOPLIST_KEY_NSMicrophoneUsageDescription": '"회의를 녹음해 말글에 올릴 때 마이크를 사용해요."',
             "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t)',
-            "MARKETING_VERSION": "1.13.1",
+            "MARKETING_VERSION": VERSION,
             "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}"',
             "PRODUCT_NAME": '"$(TARGET_NAME)"',
             "SUPPORTED_PLATFORMS": '"iphoneos iphonesimulator"',
@@ -50,7 +69,7 @@ def target_settings(kind: str) -> dict:
         "INFOPLIST_FILE": '"Config/Share-Info.plist"',
         "INFOPLIST_KEY_CFBundleDisplayName": '"말글"',
         "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t\t"@executable_path/../../Frameworks",\n\t\t\t\t)',
-        "MARKETING_VERSION": "1.13.1",
+        "MARKETING_VERSION": VERSION,
         "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}.share"',
         "PRODUCT_NAME": '"$(TARGET_NAME)"',
         "SKIP_INSTALL": "YES",
@@ -58,6 +77,36 @@ def target_settings(kind: str) -> dict:
         "SWIFT_EMIT_LOC_STRINGS": "YES",
         "SWIFT_VERSION": "5.0",
         "TARGETED_DEVICE_FAMILY": '"1,2"',
+    }
+
+
+def mac_settings() -> dict:
+    return {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+        "CODE_SIGN_ENTITLEMENTS": "Config/Mac.entitlements",
+        "CODE_SIGN_STYLE": "Automatic",
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": '""',
+        "ENABLE_HARDENED_RUNTIME": "YES",
+        "ENABLE_PREVIEWS": "YES",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_FILE": '"Config/Mac-Info.plist"',
+        "INFOPLIST_KEY_CFBundleDisplayName": '"말글"',
+        "INFOPLIST_KEY_LSApplicationCategoryType": '"public.app-category.productivity"',
+        "INFOPLIST_KEY_NSMicrophoneUsageDescription": '"회의를 녹음해 말글에 올릴 때 마이크를 사용해요."',
+        "INFOPLIST_KEY_NSSpeechRecognitionUsageDescription": '"녹음을 이 Mac에서 받아쓸 때 음성 인식을 사용해요."',
+        "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/../Frameworks",\n\t\t\t\t)',
+        "MACOSX_DEPLOYMENT_TARGET": MAC_DEPLOY,
+        "MARKETING_VERSION": VERSION,
+        "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}"',
+        "PRODUCT_MODULE_NAME": "MalgeulMac",
+        "PRODUCT_NAME": '"말글"',
+        "SDKROOT": "macosx",
+        "SUPPORTED_PLATFORMS": "macosx",
+        "SWIFT_EMIT_LOC_STRINGS": "YES",
+        "SWIFT_VERSION": "5.0",
     }
 
 
@@ -77,7 +126,7 @@ def watch_settings() -> dict:
         "INFOPLIST_KEY_UISupportedInterfaceOrientations": '"UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"',
         "INFOPLIST_KEY_WKCompanionAppBundleIdentifier": f'"{APP_ID}"',
         "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t)',
-        "MARKETING_VERSION": "1.13.1",
+        "MARKETING_VERSION": VERSION,
         "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}.watchkitapp"',
         "PRODUCT_NAME": '"$(TARGET_NAME)"',
         "SDKROOT": "watchos",
@@ -99,7 +148,7 @@ def widget_settings() -> dict:
         "INFOPLIST_FILE": '"Config/Widget-Info.plist"',
         "INFOPLIST_KEY_CFBundleDisplayName": '"말글"',
         "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t\t"@executable_path/../../Frameworks",\n\t\t\t\t)',
-        "MARKETING_VERSION": "1.13.1",
+        "MARKETING_VERSION": VERSION,
         "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}.widget"',
         "PRODUCT_NAME": '"$(TARGET_NAME)"',
         "SKIP_INSTALL": "YES",
@@ -119,7 +168,7 @@ def uitest_settings() -> dict:
         "INFOPLIST_FILE": '"Config/UITest-Info.plist"',
         "INFOPLIST_KEY_CFBundleDisplayName": '"MalgeulUITests"',
         "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t)',
-        "MARKETING_VERSION": "1.13.1",
+        "MARKETING_VERSION": VERSION,
         "PRODUCT_BUNDLE_IDENTIFIER": f'"{APP_ID}.ui-test"',
         "PRODUCT_NAME": '"$(TARGET_NAME)"',
         "SUPPORTED_PLATFORMS": '"iphoneos iphonesimulator"',
@@ -206,6 +255,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t{I(0x69)} /* MalgeulWatch.app in Embed Watch Content */ = {{isa = PBXBuildFile; fileRef = {I(0x60)} /* MalgeulWatch.app */; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy, ); }}; }};
 \t\t{I(0x79)} /* MalgeulWidget.appex in Embed Foundation Extensions */ = {{isa = PBXBuildFile; fileRef = {I(0x70)} /* MalgeulWidget.appex */; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy, ); }}; }};
 \t\t{I(0x51)} /* FluidAudio in Frameworks */ = {{isa = PBXBuildFile; productRef = {I(0x52)} /* FluidAudio */; }};
+\t\t{I(0xA0)} /* FluidAudio in Frameworks (Mac) */ = {{isa = PBXBuildFile; productRef = {I(0xA1)} /* FluidAudio */; }};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -221,10 +271,23 @@ pbx = f"""// !$*UTF8*$!
 \t\t{I(0x0D)} /* Malgeul.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Malgeul.entitlements; sourceTree = "<group>"; }};
 \t\t{I(0x0E)} /* Share.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Share.entitlements; sourceTree = "<group>"; }};
 \t\t{I(0x8F)} /* UITest-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "UITest-Info.plist"; sourceTree = "<group>"; }};
+\t\t{I(0xA2)} /* 말글.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "말글.app"; sourceTree = BUILT_PRODUCTS_DIR; }};
+\t\t{I(0xA4)} /* Mac-Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Mac-Info.plist"; sourceTree = "<group>"; }};
+\t\t{I(0xA5)} /* Mac.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mac.entitlements; sourceTree = "<group>"; }};
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+\t\t{I(0xA6)} /* Exceptions for "Malgeul" folder in "MalgeulMac" target */ = {{
+\t\t\tisa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+\t\t\tmembershipExceptions = (
+{MAC_EXCLUDE_LINES}\t\t\t);
+\t\t\ttarget = {I(0xAA)} /* MalgeulMac */;
+\t\t}};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-\t\t{I(0x02)} /* Malgeul */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = Malgeul; sourceTree = "<group>"; }};
+\t\t{I(0x02)} /* Malgeul */ = {{isa = PBXFileSystemSynchronizedRootGroup; exceptions = ({I(0xA6)} /* Exceptions for "Malgeul" folder in "MalgeulMac" target */, ); path = Malgeul; sourceTree = "<group>"; }};
+\t\t{I(0xA3)} /* MalgeulMac */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulMac; sourceTree = "<group>"; }};
 \t\t{I(0x21)} /* MalgeulShare */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulShare; sourceTree = "<group>"; }};
 \t\t{I(0x61)} /* MalgeulWatch */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = MalgeulWatch; sourceTree = "<group>"; }};
 \t\t{I(0x40)} /* Shared */ = {{isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; }};
@@ -315,6 +378,7 @@ pbx = f"""// !$*UTF8*$!
 
 /* Begin PBXFrameworksBuildPhase section */
 {phase(I(0x03), "PBXFrameworksBuildPhase", "Frameworks", f"\t\t\t\t{I(0x51)} /* FluidAudio in Frameworks */,\n")}
+{phase(I(0xA8), "PBXFrameworksBuildPhase", "Frameworks", f"\t\t\t\t{I(0xA0)} /* FluidAudio in Frameworks (Mac) */,\n")}
 {phase(I(0x23), "PBXFrameworksBuildPhase", "Frameworks")}
 {phase(I(0x63), "PBXFrameworksBuildPhase", "Frameworks")}
 {phase(I(0x73), "PBXFrameworksBuildPhase", "Frameworks")}
@@ -332,6 +396,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x71)} /* MalgeulWidget */,
 \t\t\t\t{I(0x7E)} /* LiveActivity */,
 \t\t\t\t{I(0x81)} /* MalgeulUITests */,
+\t\t\t\t{I(0xA3)} /* MalgeulMac */,
 \t\t\t\t{I(0x0A)} /* Config */,
 \t\t\t\t{I(0x05)} /* Products */,
 \t\t\t);
@@ -347,6 +412,8 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x6D)} /* Watch-Info.plist */,
 \t\t\t\t{I(0x7D)} /* Widget-Info.plist */,
 \t\t\t\t{I(0x8F)} /* UITest-Info.plist */,
+\t\t\t\t{I(0xA4)} /* Mac-Info.plist */,
+\t\t\t\t{I(0xA5)} /* Mac.entitlements */,
 \t\t\t);
 \t\t\tpath = Config;
 \t\t\tsourceTree = "<group>";
@@ -359,6 +426,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\t\t{I(0x60)} /* MalgeulWatch.app */,
 \t\t\t\t{I(0x70)} /* MalgeulWidget.appex */,
 \t\t\t\t{I(0x80)} /* MalgeulUITests.xctest */,
+\t\t\t\t{I(0xA2)} /* 말글.app */,
 \t\t\t);
 \t\t\tname = Products;
 \t\t\tsourceTree = "<group>";
@@ -366,6 +434,31 @@ pbx = f"""// !$*UTF8*$!
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+\t\t{I(0xAA)} /* MalgeulMac */ = {{
+\t\t\tisa = PBXNativeTarget;
+\t\t\tbuildConfigurationList = {I(0xAB)} /* Build configuration list for PBXNativeTarget "MalgeulMac" */;
+\t\t\tbuildPhases = (
+\t\t\t\t{I(0xA7)} /* Sources */,
+\t\t\t\t{I(0xA8)} /* Frameworks */,
+\t\t\t\t{I(0xA9)} /* Resources */,
+\t\t\t);
+\t\t\tbuildRules = (
+\t\t\t);
+\t\t\tdependencies = (
+\t\t\t);
+\t\t\tfileSystemSynchronizedGroups = (
+\t\t\t\t{I(0x02)} /* Malgeul */,
+\t\t\t\t{I(0x40)} /* Shared */,
+\t\t\t\t{I(0xA3)} /* MalgeulMac */,
+\t\t\t);
+\t\t\tname = MalgeulMac;
+\t\t\tpackageProductDependencies = (
+\t\t\t\t{I(0xA1)} /* FluidAudio */,
+\t\t\t);
+\t\t\tproductName = MalgeulMac;
+\t\t\tproductReference = {I(0xA2)} /* 말글.app */;
+\t\t\tproductType = "com.apple.product-type.application";
+\t\t}};
 \t\t{I(0x06)} /* Malgeul */ = {{
 \t\t\tisa = PBXNativeTarget;
 \t\t\tbuildConfigurationList = {I(0x10)} /* Build configuration list for PBXNativeTarget "Malgeul" */;
@@ -532,6 +625,7 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tprojectRoot = "";
 \t\t\ttargets = (
 \t\t\t\t{I(0x06)} /* Malgeul */,
+\t\t\t\t{I(0xAA)} /* MalgeulMac */,
 \t\t\t\t{I(0x25)} /* MalgeulShare */,
 \t\t\t\t{I(0x65)} /* MalgeulWatch */,
 \t\t\t\t{I(0x75)} /* MalgeulWidget */,
@@ -542,6 +636,7 @@ pbx = f"""// !$*UTF8*$!
 
 /* Begin PBXResourcesBuildPhase section */
 {phase(I(0x08), "PBXResourcesBuildPhase", "Resources")}
+{phase(I(0xA9), "PBXResourcesBuildPhase", "Resources")}
 {phase(I(0x24), "PBXResourcesBuildPhase", "Resources")}
 {phase(I(0x64), "PBXResourcesBuildPhase", "Resources")}
 {phase(I(0x74), "PBXResourcesBuildPhase", "Resources")}
@@ -550,6 +645,7 @@ pbx = f"""// !$*UTF8*$!
 
 /* Begin PBXSourcesBuildPhase section */
 {phase(I(0x07), "PBXSourcesBuildPhase", "Sources")}
+{phase(I(0xA7), "PBXSourcesBuildPhase", "Sources")}
 {phase(I(0x22), "PBXSourcesBuildPhase", "Sources")}
 {phase(I(0x62), "PBXSourcesBuildPhase", "Sources")}
 {phase(I(0x72), "PBXSourcesBuildPhase", "Sources")}
@@ -561,6 +657,8 @@ pbx = f"""// !$*UTF8*$!
 {config(I(0x13), "Release", project_settings(False))}
 {config(I(0x14), "Debug", target_settings("app"))}
 {config(I(0x15), "Release", target_settings("app"))}
+{config(I(0xAC), "Debug", mac_settings())}
+{config(I(0xAD), "Release", mac_settings())}
 {config(I(0x26), "Debug", target_settings("share"))}
 {config(I(0x27), "Release", target_settings("share"))}
 {config(I(0x66), "Debug", watch_settings())}
@@ -626,6 +724,15 @@ pbx = f"""// !$*UTF8*$!
 \t\t\tdefaultConfigurationIsVisible = 0;
 \t\t\tdefaultConfigurationName = Release;
 \t\t}};
+\t\t{I(0xAB)} /* Build configuration list for PBXNativeTarget "MalgeulMac" */ = {{
+\t\t\tisa = XCConfigurationList;
+\t\t\tbuildConfigurations = (
+\t\t\t\t{I(0xAC)} /* Debug */,
+\t\t\t\t{I(0xAD)} /* Release */,
+\t\t\t);
+\t\t\tdefaultConfigurationIsVisible = 0;
+\t\t\tdefaultConfigurationName = Release;
+\t\t}};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -641,6 +748,11 @@ pbx = f"""// !$*UTF8*$!
 
 /* Begin XCSwiftPackageProductDependency section */
 \t\t{I(0x52)} /* FluidAudio */ = {{
+\t\t\tisa = XCSwiftPackageProductDependency;
+\t\t\tpackage = {I(0x50)} /* XCRemoteSwiftPackageReference "FluidAudio" */;
+\t\t\tproductName = FluidAudio;
+\t\t}};
+\t\t{I(0xA1)} /* FluidAudio */ = {{
 \t\t\tisa = XCSwiftPackageProductDependency;
 \t\t\tpackage = {I(0x50)} /* XCRemoteSwiftPackageReference "FluidAudio" */;
 \t\t\tproductName = FluidAudio;
@@ -719,9 +831,31 @@ scheme_uitest = f"""<?xml version="1.0" encoding="UTF-8"?>
 </Scheme>
 """
 
+scheme_mac = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Scheme LastUpgradeVersion = "1600" version = "1.7">
+   <BuildAction parallelizeBuildables = "YES" buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry buildForTesting = "YES" buildForRunning = "YES" buildForProfiling = "YES" buildForArchiving = "YES" buildForAnalyzing = "YES">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "{I(0xAA)}" BuildableName = "말글.app" BlueprintName = "MalgeulMac" ReferencedContainer = "container:Malgeul.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <LaunchAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle = "0" useCustomWorkingDirectory = "NO" ignoresPersistentStateOnLaunch = "NO" debugDocumentVersioning = "YES" debugServiceExtension = "internal" allowLocationSimulation = "YES">
+      <BuildableProductRunnable runnableDebuggingMode = "0">
+         <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "{I(0xAA)}" BuildableName = "말글.app" BlueprintName = "MalgeulMac" ReferencedContainer = "container:Malgeul.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </LaunchAction>
+   <ArchiveAction buildConfiguration = "Release" revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>
+"""
+
 proj = os.path.join(ROOT, "Malgeul.xcodeproj")
 os.makedirs(os.path.join(proj, "xcshareddata", "xcschemes"), exist_ok=True)
 open(os.path.join(proj, "project.pbxproj"), "w").write(pbx)
 open(os.path.join(proj, "xcshareddata", "xcschemes", "Malgeul.xcscheme"), "w").write(scheme)
 open(os.path.join(proj, "xcshareddata", "xcschemes", "MalgeulUITests.xcscheme"), "w").write(scheme_uitest)
+open(os.path.join(proj, "xcshareddata", "xcschemes", "MalgeulMac.xcscheme"), "w").write(scheme_mac)
 print("ok")

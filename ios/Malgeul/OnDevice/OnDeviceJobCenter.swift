@@ -1,6 +1,8 @@
 import Foundation
+#if os(iOS)
 import UIKit
 import BackgroundTasks
+#endif
 import UserNotifications
 
 /// 기기 받아쓰기·기기 화자 추정 작업 큐 (한 번에 하나씩).
@@ -420,6 +422,7 @@ final class OnDeviceJobCenter: ObservableObject {
         uiBgTask = UIApplication.shared.beginBackgroundTask(withName: "ondevice") { [weak self] in
             Task { @MainActor in self?.endUIBackground() }
         }
+        #if os(iOS)
         if #available(iOS 26.0, *) {
             let ident = "\(Self.bgPrefix).\(job.id.uuidString)"
             let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: ident, using: nil) { task in
@@ -437,19 +440,24 @@ final class OnDeviceJobCenter: ObservableObject {
             req.strategy = .fail
             try? BGTaskScheduler.shared.submit(req)
         }
+        #endif
     }
 
     private func updateBackground(progress p: Double, message: String) {
+        #if os(iOS)
         if #available(iOS 26.0, *), let t = bgTask as? BGContinuedProcessingTask {
             t.progress.completedUnitCount = Int64(p * 100)
             t.updateTitle(t.title, subtitle: message)
         }
+        #endif
     }
 
     private func endBackground() {
+        #if os(iOS)
         if #available(iOS 26.0, *), let t = bgTask as? BGContinuedProcessingTask {
             t.setTaskCompleted(success: true)
         }
+        #endif
         bgTask = nil
         endUIBackground()
     }

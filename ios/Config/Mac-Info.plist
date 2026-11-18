@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>말글</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>오디오</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.audio</string>
+				<string>public.mpeg-4-audio</string>
+				<string>com.apple.m4a-audio</string>
+				<string>public.mp3</string>
+				<string>com.microsoft.waveform-audio</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>동영상</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.movie</string>
+				<string>public.mpeg-4</string>
+				<string>com.apple.quicktime-movie</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>kr.b-612.malgeul</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>malgeul</string>
+			</array>
+		</dict>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>MGServerURL</key>
+	<string>$(MG_SERVER_URL)</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>SharedKeychainGroup</key>
+	<string>$(AppIdentifierPrefix)kr.b-612.malgeul.shared</string>
+</dict>
+</plist>

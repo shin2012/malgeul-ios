@@ -196,7 +196,7 @@ struct DeviceLabView: View {
             }
         }
         .navigationTitle("기기 처리 실험")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
     }
 
     private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {

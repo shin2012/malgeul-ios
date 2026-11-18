@@ -1,5 +1,7 @@
 import Foundation
+#if os(iOS)
 import UIKit
+#endif
 
 enum APIError: LocalizedError {
     case notConfigured

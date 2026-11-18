@@ -31,7 +31,11 @@ struct MeetingListView: View {
     @EnvironmentObject private var router: Router
     @EnvironmentObject private var uploads: UploadCenter
     @EnvironmentObject private var device: OnDeviceJobCenter
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var hsize
+    #else
+    private let hsize: SizeClassShim? = .regular
+    #endif
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var search = ""
@@ -102,8 +106,8 @@ struct MeetingListView: View {
     private var main: some View {
         state
             .navigationTitle(filter.title)
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(Color.white, for: .navigationBar)
+            .largeTitle()
+            .whiteNavigationBar()
             .toolbar { toolbar }
             .onChange(of: multi) { _, _ in deletion.reset() }
             .onChange(of: filter) { _, _ in deletion.reset() }
@@ -160,7 +164,7 @@ struct MeetingListView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(Color.mgBg)
-                .environment(\.editMode, .constant(.active))
+                .editModeActive()
         } else {
             List(selection: $router.meetingID) {
                 filterChips
@@ -379,13 +383,13 @@ struct MeetingListView: View {
     // MARK: 툴바
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .barLeading) {
             Button { router.tab = .settings } label: { Image(systemName: "gearshape") }
                 .accessibilityLabel("설정")
         }
         if config.isConfigured {
             if !selecting {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .barTrailing) {
                     Menu {
                         Picker("정렬 기준", selection: $store.sortKey) {
                             ForEach(SortKey.allCases) { Text($0.label).tag($0) }
@@ -403,14 +407,14 @@ struct MeetingListView: View {
                     .accessibilityLabel("정렬")
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .barTrailing) {
                 Button(selecting ? "완료" : "선택") {
                     withAnimation { selecting.toggle(); multi.removeAll() }
                 }
                 .disabled(store.meetings.isEmpty)
             }
             if selecting {
-                ToolbarItem(placement: .bottomBar) {
+                ToolbarItem(placement: .bottomBarOrAuto) {
                     Button(multi.count == filtered.count ? "선택 해제" : "전체 선택") {
                         multi = multi.count == filtered.count ? [] : Set(filtered.map(\.id))
                     }
@@ -418,7 +422,7 @@ struct MeetingListView: View {
                 ToolbarItem(placement: .status) {
                     Text("\(multi.count)개 선택").font(.system(size: 14)).foregroundStyle(Color.mgFg2)
                 }
-                ToolbarItem(placement: .bottomBar) {
+                ToolbarItem(placement: .bottomBarOrAuto) {
                     TwoTapDeleteButton(target: "multi-" + multi.sorted().map(String.init).joined(separator: ","), confirmation: $deletion,
                                        title: deleting ? "삭제 중…" : "삭제") {
                         let ids = multi
@@ -799,7 +803,7 @@ struct RecordedAtSheet: View {
                 }
             }
             .navigationTitle("녹음 시각 수정")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

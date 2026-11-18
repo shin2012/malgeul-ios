@@ -28,8 +28,7 @@ struct LoginView: View {
                         TextField("이름", text: $name).textContentType(.name).focused($focus, equals: 0)
                     }
                     TextField("이메일", text: $email)
-                        .textContentType(.username).keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled().focused($focus, equals: 1)
+                        .emailEntry().focused($focus, equals: 1)
                     if mode != .forgot {
                         SecureField(mode == .signup ? "비밀번호 (8자 이상)" : "비밀번호", text: $password)
                             .textContentType(mode == .signup ? .newPassword : .password).focused($focus, equals: 2)

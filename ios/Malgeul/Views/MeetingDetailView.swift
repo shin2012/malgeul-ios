@@ -288,11 +288,11 @@ struct MeetingDetailView: View {
     private func dialogs1<V: View>(_ v: V) -> some View {
         v
             .navigationTitle(meeting?.title ?? "")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar(removing: .title)
-            .toolbarBackground(Color.white, for: .navigationBar)
+            .whiteNavigationBar()
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .barTrailing) {
                     Button {
                         if !(tab == .script) { tab = .script }
                         finding.toggle()
@@ -300,7 +300,7 @@ struct MeetingDetailView: View {
                     } label: { Image(systemName: "magnifyingglass") }
                     .accessibilityLabel("대화에서 찾기")
                 }
-                ToolbarItem(placement: .topBarTrailing) { moreMenu }
+                ToolbarItem(placement: .barTrailing) { moreMenu }
             }
             .sheet(isPresented: $showSpeakers) {
                 SpeakersSheet(meetingID: meetingID, segments: segments, doc: doc) { (old: String, new: String) in

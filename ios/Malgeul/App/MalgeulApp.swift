@@ -1,5 +1,8 @@
 import SwiftUI
 import AVFoundation
+#if os(macOS)
+import AppKit
+#endif
 
 enum AppTab: Hashable { case meetings, record, settings }
 
@@ -58,15 +61,18 @@ enum DebugRoute {
             }
         case "live": livePreview = .light
         case "livedark": livePreview = .dark
+        #if os(iOS)
         case "real", "realdark":
             // 실제 라이브 액티비티를 띄움 (녹음은 하지 않음)
             LiveRecording.shared.start(title: "11월 11일 14:05 시작", startedAt: .now - 754, elapsed: 754)
+        #endif
         default: break
         }
     }
 }
 #endif
 
+#if os(iOS)
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // 백그라운드 업로드 세션을 앱 시작 때 다시 연결해 둠 (끝난 업로드 결과 수신)
@@ -97,10 +103,35 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in UploadCenter.shared.backgroundCompletion = completionHandler }
     }
 }
+#else
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            // 업로드 세션을 앱 시작 때 다시 연결 (끝난 업로드 결과 수신)
+            _ = UploadCenter.shared
+            InterruptionNotificationManager.shared.install()
+            Recorder.shared.recoverUnfinishedRecording()
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { Recorder.shared.appWillTerminate() }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // 녹음 중이면 창을 닫아도 계속 녹음
+        MainActor.assumeIsolated { !Recorder.shared.isActive }
+    }
+}
+#endif
 
 @main
 struct MalgeulApp: App {
+    #if os(iOS)
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #else
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
     @StateObject private var config = AppConfig.shared
     @StateObject private var router = Router.shared
     @StateObject private var store = MeetingStore.shared
@@ -124,7 +155,7 @@ struct MalgeulApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                #if DEBUG
+                #if DEBUG && os(iOS)
                 .task {
                     if UserDefaults.standard.bool(forKey: "recordingSelfTest") {
                         try? await Task.sleep(for: .seconds(2))
@@ -144,7 +175,7 @@ struct MalgeulApp: App {
                 .tint(.accentMalgeul)
                 .preferredColorScheme(.light)
                 .onOpenURL(perform: handle)
-                #if DEBUG
+                #if DEBUG && os(iOS)
                 .overlay {
                     if let sc = DebugRoute.livePreview {
                         LivePreviewView().environment(\.colorScheme, sc)
@@ -152,6 +183,18 @@ struct MalgeulApp: App {
                 }
                 #endif
         }
+        #if os(macOS)
+        .defaultSize(width: 1100, height: 760)
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button("녹음하기") { router.tab = .record; router.startRecordingRequest = true }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+            }
+            CommandGroup(replacing: .appSettings) {
+                Button("설정…") { router.tab = .settings }.keyboardShortcut(",")
+            }
+        }
+        #endif
     }
 
     private func handle(_ url: URL) {
@@ -185,7 +228,11 @@ struct RootView: View {
     @EnvironmentObject private var player: AudioPlayer
     @EnvironmentObject private var device: OnDeviceJobCenter
 
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var hsize
+    #else
+    private let hsize: SizeClassShim? = .regular
+    #endif
 
     var body: some View {
         root
@@ -216,7 +263,7 @@ struct RootView: View {
 
     private var standardRoot: some View {
         MeetingsSplitView()
-            .fullScreenCover(isPresented: $router.showLogin) { LoginView() }
+            .coverOrSheet(isPresented: $router.showLogin) { LoginView() }
             .onAppear { if !config.isConfigured { router.showLogin = true } else { Task { await API.shared.refreshMe() } } }
             .onChange(of: config.token) { _, t in
                 // 로그아웃·로그인 풀림 → 목록 비우고 로그인 화면

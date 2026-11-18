@@ -16,6 +16,9 @@ enum Keychain {
                                 kSecAttrService as String: service,
                                 kSecAttrAccount as String: key]
         if let group { q[kSecAttrAccessGroup as String] = group }
+        #if os(macOS)
+        q[kSecUseDataProtectionKeychain as String] = true
+        #endif
         return q
     }
 

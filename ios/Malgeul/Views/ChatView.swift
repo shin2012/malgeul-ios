@@ -13,7 +13,11 @@ struct ChatView: View {
     let meetingID: Int
     /// 상세 화면 탭 안: 제목 줄 없이
     var compact = false
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var hsize
+    #else
+    private let hsize: SizeClassShim? = .regular
+    #endif
 
     @State private var messages: [ChatMessage] = []
     @State private var input = ""

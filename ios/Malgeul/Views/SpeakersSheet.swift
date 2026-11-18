@@ -44,7 +44,7 @@ struct SpeakersSheet: View {
             }
             .background(Color.mgBg)
             .navigationTitle("참석자 · 대화 점유율")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("닫기")

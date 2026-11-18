@@ -226,7 +226,7 @@ struct FinishRecordingSheet: View {
                 }
             }
             .navigationTitle("녹음 완료")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("나중에") { save(); dismiss() }

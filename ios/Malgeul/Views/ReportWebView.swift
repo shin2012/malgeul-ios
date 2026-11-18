@@ -158,6 +158,15 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
             return
         }
         guard message.name == "malgeulPrint", let webView else { return }
+        #if os(macOS)
+        let info = NSPrintInfo.shared
+        info.jobDisposition = .spool
+        let op = webView.printOperation(with: info)
+        op.jobTitle = (message.body as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "회의록"
+        op.showsPrintPanel = true
+        op.showsProgressPanel = true
+        if let w = webView.window { op.runModal(for: w, delegate: nil, didRun: nil, contextInfo: nil) } else { op.run() }
+        #else
         let info = UIPrintInfo(dictionary: nil)
         info.outputType = .general
         info.jobName = (message.body as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "회의록"
@@ -165,9 +174,28 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
         pc.printInfo = info
         pc.printFormatter = webView.viewPrintFormatter()
         pc.present(animated: true)
+        #endif
     }
 
     // MARK: alert / confirm
+    #if os(macOS)
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo) async {
+        let a = NSAlert()
+        a.messageText = message
+        a.addButton(withTitle: "확인")
+        a.runModal()
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo) async -> Bool {
+        let a = NSAlert()
+        a.messageText = message
+        a.addButton(withTitle: "확인")
+        a.addButton(withTitle: "취소")
+        return a.runModal() == .alertFirstButtonReturn
+    }
+    #else
     private func topVC() -> UIViewController? {
         var vc = webView?.window?.rootViewController
         while let p = vc?.presentedViewController { vc = p }
@@ -194,6 +222,7 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
             vc.present(a, animated: true)
         }
     }
+    #endif
 }
 
 /// 메시지 핸들러가 컨트롤러를 붙잡아 두지 않도록 약한 참조로 중계
@@ -205,12 +234,21 @@ final class WeakScriptHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
+#if os(iOS)
 struct ReportWebContainer: UIViewRepresentable {
     let meetingID: Int
     let controller: ReportWebController
     func makeUIView(context: Context) -> WKWebView { controller.make(meetingID: meetingID) }
     func updateUIView(_ v: WKWebView, context: Context) {}
 }
+#else
+struct ReportWebContainer: NSViewRepresentable {
+    let meetingID: Int
+    let controller: ReportWebController
+    func makeNSView(context: Context) -> WKWebView { controller.make(meetingID: meetingID) }
+    func updateNSView(_ v: WKWebView, context: Context) {}
+}
+#endif
 
 struct ReportWebView: View {
     let meetingID: Int
@@ -230,10 +268,10 @@ struct ReportWebView: View {
                     ProgressView()
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .navigationBarBackButtonHidden(true)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .barLeading) {
                     Button {
                         Task {
                             if await controller.isDirty() { confirmLeave = true } else { onSaved(); dismiss() }
@@ -249,12 +287,12 @@ struct ReportWebView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .barTrailing) {
                     Button("저장") { controller.run("save()") }
                         .fontWeight(controller.dirty ? .semibold : .regular)
                         .disabled(controller.loadError != nil)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .barTrailing) {
                     Menu {
                         Button { controller.printDoc() } label: { Label("인쇄 / PDF 저장", systemImage: "printer") }
                         if controller.edited {

@@ -282,6 +282,7 @@ struct DocPanelView: View {
 
 struct ShareItem: Identifiable { let url: URL; var id: String { url.path } }
 
+#if os(iOS)
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
@@ -289,3 +290,4 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
+#endif
