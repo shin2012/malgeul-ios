@@ -23,6 +23,18 @@ let importedDone = NoteListProjection.rows(locals: [], uploads: [], meetingIDs: 
 expect(imported.count == 1 && importedDone[0].id == imported[0].id, "외부 파일도 완료 후 표시 ID 유지")
 expect(NoteListProjection.rows(locals: linked, uploads: [], meetingIDs: [], aliases: [:]).count == 1, "서버 재조회 실패해도 연결된 로컬 항목 유지")
 expect(NoteListProjection.rows(locals: [.init(id: "one.m4a", meetingID: nil), .init(id: "two.m4a", meetingID: nil)], uploads: [], meetingIDs: [], aliases: [:]).count == 2, "다른 파일은 임의로 합치지 않음")
+// 실제 사례: 예전에 실패한 업로드 작업이 남은 채 같은 녹음을 다시 올려 서버 노트가 생김
+// → 남은 작업 행과 서버 노트 행이 같은 표시 ID("local-…")를 가져 SwiftUI가 노트 행을 두 번 그림
+let staleJob = [NoteListProjection.Upload(id: "old-job", recordingID: "rec.m4a", meetingID: nil)]
+for locals in [[NoteListProjection.Local(id: "rec.m4a", meetingID: 81)], []] {
+    let r = NoteListProjection.rows(locals: locals, uploads: staleJob, meetingIDs: [81], aliases: [81: "local-rec.m4a"])
+    expect(r.count == 1 && r[0].meetingID == 81, "남은 업로드 작업이 있어도 서버 노트는 한 행 (로컬 \(locals.count))")
+    expect(Set(r.map(\.id)).count == r.count, "표시 ID 중복 없음 (로컬 \(locals.count))")
+}
+let noAlias = NoteListProjection.rows(locals: [.init(id: "rec.m4a", meetingID: 81)], uploads: staleJob, meetingIDs: [81], aliases: [:])
+expect(noAlias.count == 1 && noAlias[0].meetingID == 81, "별칭이 없어도 같은 녹음의 남은 작업은 서버 노트에 합침")
+let unlinkedLocal = NoteListProjection.rows(locals: [.init(id: "rec.m4a", meetingID: nil)], uploads: [], meetingIDs: [81], aliases: [81: "local-rec.m4a"])
+expect(unlinkedLocal.count == 1 && unlinkedLocal[0].meetingID == 81, "녹음 연결이 저장되지 않았어도 같은 표시 ID면 한 행")
 func meeting(_ extra: String = "") -> Meeting {
     try! JSONDecoder().decode(Meeting.self, from: Data(("{\"id\":1,\"title\":\"회의\",\"status\":\"done\",\"ai_analyzed\":1" + extra + "}").utf8))
 }

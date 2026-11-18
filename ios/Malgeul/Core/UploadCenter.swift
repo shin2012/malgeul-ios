@@ -92,6 +92,12 @@ final class UploadCenter: NSObject, ObservableObject {
         session.getAllTasks { tasks in
             let live = Set(tasks.compactMap { $0.taskDescription?.split(separator: "|").first.map(String.init) })
             Task { @MainActor in
+                // 이미 서버 노트에 연결된 녹음의 실패 작업은 더 쓸 일이 없음 → 정리 (예전 버전이 남긴 중복 작업)
+                for j in self.jobs where j.state == .failed {
+                    if let rid = j.recordingID, RecordingStore.shared.items.contains(where: { $0.id == rid && $0.meetingID != nil }) {
+                        self.finish(j.id, removeSource: false)
+                    }
+                }
                 for j in self.jobs where j.state != .failed && !live.contains(j.id.uuidString) {
                     self.set(j.id) { $0.state = .failed; $0.message = j.uploadId == nil ? "앱이 종료되어 업로드가 중단되었습니다" : "업로드가 중단되었습니다 · 다시 시도하면 이어서 올립니다" }
                 }
@@ -128,6 +134,12 @@ final class UploadCenter: NSObject, ObservableObject {
         var rel = file.standardizedFileURL.path
         if rel.hasPrefix(home) { rel = String(rel.dropFirst(home.count)) }
         // 받아쓰기 방식이 '이 기기'면 서버 자동 받아쓰기 대신 업로드 후 기기에서
+        if let recordingID {
+            // 같은 녹음은 작업 하나만: 진행 중이면 새로 만들지 않고, 실패해 남은 옛 작업은 정리
+            // (남겨 두면 업로드 후 목록에 같은 노트가 두 번 보임)
+            if jobs.contains(where: { $0.recordingID == recordingID && $0.state != .failed }) { return }
+            dropSiblings(of: nil, recordingID: recordingID)
+        }
         let device = autoTranscribe && AppConfig.shared.engine == .device && AppConfig.deviceTranscribeAvailable && deviceResultJob == nil
         let job = UploadJob(sourceRelPath: rel, filename: filename, recordedAt: recordedAt,
                             autoTranscribe: autoTranscribe && !device && deviceResultJob == nil,
@@ -151,6 +163,17 @@ final class UploadCenter: NSObject, ObservableObject {
     }
 
     func isUploading(recordingID: String) -> UploadJob? { jobs.first { $0.recordingID == recordingID } }
+
+    /// 같은 녹음의 다른 작업(실패해 남은 것 등)을 정리. 원본 녹음 파일은 지우지 않음.
+    private func dropSiblings(of id: UUID?, recordingID: String?) {
+        guard let recordingID else { return }
+        for j in jobs where j.id != id && j.recordingID == recordingID {
+            session.getAllTasks { tasks in
+                tasks.filter { $0.taskDescription?.hasPrefix(j.id.uuidString) == true }.forEach { $0.cancel() }
+            }
+            finish(j.id, removeSource: false)
+        }
+    }
 
     // MARK: - 단계
 
@@ -320,6 +343,7 @@ final class UploadCenter: NSObject, ObservableObject {
                 let displayID = job.recordingID.map { "local-" + $0 } ?? "upload-" + job.id.uuidString
                 guard MeetingStore.shared.acceptUpload(data, displayID: displayID) else { throw APIError.badResponse }
                 set(id) { $0.meetingID = existingID }
+                self.dropSiblings(of: id, recordingID: job.recordingID)
                 if let rid = job.recordingID {
                     RecordingStore.shared.markUploaded(rid, meetingID: existingID, removeIfConfigured: false)
                 }
@@ -363,6 +387,7 @@ final class UploadCenter: NSObject, ObservableObject {
             return
         }
         set(id) { $0.meetingID = meetingID }
+        dropSiblings(of: id, recordingID: job.recordingID)
         if let rid = job.recordingID { RecordingStore.shared.markUploaded(rid, meetingID: meetingID) }
         if let dj = job.deviceResultJob.flatMap(UUID.init) {
             OnDeviceJobCenter.shared.uploaded(dj, meetingID: meetingID)

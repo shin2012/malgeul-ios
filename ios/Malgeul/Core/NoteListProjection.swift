@@ -32,15 +32,17 @@ enum NoteListProjection {
                                   meetingID: upload.meetingID, recordingID: upload.recordingID, uploadID: upload.id))
             }
         }
-        for id in meetingIDs {
-            if let i = result.firstIndex(where: { $0.meetingID == id }) {
-                result.remove(at: i)
-            }
-            guard !result.contains(where: { $0.meetingID == id }) else { continue }
+        var placed = Set<Int>()
+        for id in meetingIDs where placed.insert(id).inserted {
             let local = locals.first { $0.meetingID == id }
-            let upload = uploads.first { $0.meetingID == id || (local != nil && $0.recordingID == local?.id) }
-            result.append(Row(id: aliases[id] ?? local.map { "local-" + $0.id } ?? "meeting-\(id)",
-                              meetingID: id, recordingID: local?.id, uploadID: upload?.id))
+            let rowID = aliases[id] ?? local.map { "local-" + $0.id } ?? "meeting-\(id)"
+            // 표시 ID가 "local-<녹음>"이면 그 녹음의 남은 행(실패한 옛 업로드 작업 등)도 같은 노트다.
+            let recordingID = local?.id ?? (rowID.hasPrefix("local-") ? String(rowID.dropFirst(6)) : nil)
+            // 같은 노트·같은 녹음·같은 표시 ID 행은 모두 서버 노트 한 행으로 합친다.
+            // (남겨 두면 표시 ID가 겹쳐 SwiftUI가 노트 행을 두 번 그림)
+            result.removeAll { $0.meetingID == id || $0.id == rowID || (recordingID != nil && $0.recordingID == recordingID) }
+            let upload = uploads.first { $0.meetingID == id || (recordingID != nil && $0.recordingID == recordingID) }
+            result.append(Row(id: rowID, meetingID: id, recordingID: local?.id, uploadID: upload?.id))
         }
         return result
     }
