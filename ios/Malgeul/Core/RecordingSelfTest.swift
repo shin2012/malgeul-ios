@@ -39,7 +39,8 @@ enum RecordingSelfTest {
                 try await Task.sleep(for: .seconds(0.5))
                 let info: [String: Any] = [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue]
                 NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance(), userInfo: info)
-                try await Task.sleep(for: .seconds(0.2))
+                // 느린 CI 시뮬레이터에서는 0.2초 안에 처리되지 않을 때가 있어 최대 3초까지 기다림
+                for _ in 0..<30 where !(r.state == .paused && r.interrupted) { try await Task.sleep(for: .seconds(0.1)) }
                 check(r.state == .paused && r.interrupted, "주입한 통화 중단은 일시정지")
                 check(notifications.submittedCount == before + 1, "통화 중단 알림 요청")
                 NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance(), userInfo: info)
