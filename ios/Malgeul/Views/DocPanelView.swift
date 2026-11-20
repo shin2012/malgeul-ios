@@ -119,7 +119,7 @@ struct DocPanelView: View {
     @State private var downloading: String?
     @State private var errorText: String?
     @State private var confirmRewrite: DocRewrite?
-    @State private var deleteArmed: Int?
+    @State private var confirmDelete: DocItem?
 
     private var types: [DocTypeInfo] { doc.config?.types ?? [] }
     private func name(_ k: String) -> String { types.first { $0.key == k }?.name ?? (k == "recommend" ? "추천" : "문서") }
@@ -156,6 +156,12 @@ struct DocPanelView: View {
         .modifier(DocDialogs(confirmRewrite: $confirmRewrite, errorText: $errorText, name: name) { c in
             Task { await run(template: c.template, docID: c.doc.id) }
         })
+        .alert("문서 삭제", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }), presenting: confirmDelete) { (d: DocItem) in
+            Button("취소", role: .cancel) {}
+            Button("삭제", role: .destructive) { Task { if let e = await doc.delete(d) { errorText = e } } }
+        } message: { (d: DocItem) in
+            Text("‘\(name(d.type))’ 문서\(d.subject.map { "(\($0))" } ?? "")를 정말 삭제하시겠습니까? 되돌릴 수 없습니다.")
+        }
     }
 
     private var card: some Shape { RoundedRectangle(cornerRadius: 14, style: .continuous) }
@@ -164,7 +170,13 @@ struct DocPanelView: View {
 
     private func create(_ template: String) {
         picker = false
-        if template != "recommend", let same = doc.docs?.first(where: { $0.type == template && $0.status != "processing" }) {
+        // 한 녹음에서는 한 번에 한 문서만 작성
+        if doc.writing { errorText = "작성 중인 문서가 끝난 뒤에 만들 수 있습니다."; return }
+        let list = doc.docs ?? []
+        let same = template == "recommend"
+            ? list.first { $0.requested == "recommend" }
+            : (list.first { $0.type == template && $0.requested != "recommend" } ?? list.first { $0.type == template })
+        if let same {
             confirmRewrite = DocRewrite(template: template, doc: same)
             return
         }
@@ -177,7 +189,7 @@ struct DocPanelView: View {
     private var makeCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("문서 만들기").font(.system(size: 16, weight: .bold)).foregroundStyle(Color.mgFg)
-            Text("대화 내용으로 양식에 맞춘 문서를 작성합니다. 1~2분 걸립니다.")
+            Text(doc.writing ? "작성 중인 문서가 끝나면 다른 문서를 만들 수 있습니다." : "대화 내용으로 양식에 맞춘 문서를 작성합니다. 1~2분 걸립니다.")
                 .font(.system(size: 14)).foregroundStyle(Color.mgFg3).padding(.top, 3)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                 makeButton(icon: "sparkles", title: "추천", sub: "알맞은 양식 자동 선택", rec: true) { create("recommend") }
@@ -187,6 +199,8 @@ struct DocPanelView: View {
                 makeButton(icon: "square.grid.2x2", title: "다른 양식…", sub: "양식 \(types.isEmpty ? 11 : types.count)종") { picker = true }
             }
             .padding(.top, 14)
+            .disabled(doc.writing)
+            .opacity(doc.writing ? 0.45 : 1)
         }
         .padding(16)
         .overlay(card.stroke(Color.mgLine, lineWidth: 1))
@@ -270,10 +284,8 @@ struct DocPanelView: View {
                 Divider()
             }
             Button { confirmRewrite = DocRewrite(template: nil, doc: d) } label: { Label("다시 작성", systemImage: "arrow.clockwise") }
-            Button(role: .destructive) {
-                if deleteArmed == d.id { deleteArmed = nil; Task { if let e = await doc.delete(d) { errorText = e } } }
-                else { deleteArmed = d.id; Task { try? await Task.sleep(for: .seconds(4)); if deleteArmed == d.id { deleteArmed = nil } } }
-            } label: { Label(deleteArmed == d.id ? "한 번 더 눌러 삭제" : "삭제", systemImage: "trash") }
+                .disabled(doc.writing)
+            Button(role: .destructive) { confirmDelete = d } label: { Label("삭제", systemImage: "trash") }
         } label: {
             Image(systemName: "ellipsis").font(.system(size: 17, weight: .semibold)).foregroundStyle(Color.mgFg2)
                 .frame(width: 40, height: 40).contentShape(Rectangle())
@@ -401,7 +413,7 @@ private struct DocDialogs: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .confirmationDialog(confirmRewrite.map { "이미 있는 ‘\(name($0.doc.type))’ 문서를 새로 작성할까요?" } ?? "",
+            .confirmationDialog(confirmRewrite.map { "이미 있는 ‘\($0.template == "recommend" ? "추천" : name($0.doc.type))’ 문서를 새로 작성할까요?" } ?? "",
                                 isPresented: Binding(get: { confirmRewrite != nil }, set: { if !$0 { confirmRewrite = nil } }),
                                 titleVisibility: .visible, presenting: confirmRewrite) { (c: DocRewrite) in
                 Button("새로 작성", role: .destructive) { onConfirm(c) }
