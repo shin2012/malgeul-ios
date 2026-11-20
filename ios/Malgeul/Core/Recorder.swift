@@ -14,6 +14,8 @@ struct Recording: Codable, Identifiable, Equatable {
     var latitude: Double?
     var longitude: Double?
     var fromWatch: Bool?
+    /// 올릴 그룹 (녹음 중·완료 화면에서 고름, 없으면 설정의 ‘올릴 그룹’)
+    var groupID: Int? = nil
 
     var fileURL: URL { RecordingStore.folder.appending(path: id) }
     var fileSize: Int? { (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.intValue }
@@ -114,6 +116,12 @@ final class RecordingStore: ObservableObject {
         save()
     }
 
+    func setGroup(_ id: String, groupID: Int?) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i].groupID = groupID
+        save()
+    }
+
     func markUploaded(_ id: String, meetingID: Int, removeIfConfigured: Bool = true) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         items[i].meetingID = meetingID
@@ -134,7 +142,7 @@ final class RecordingStore: ObservableObject {
         let ext = (r.id as NSString).pathExtension.isEmpty ? "m4a" : (r.id as NSString).pathExtension
         UploadCenter.shared.enqueue(file: r.fileURL, filename: (safe.isEmpty ? "회의 녹음" : safe) + "." + ext,
                                     recordedAt: r.startedAt, autoTranscribe: autoTranscribe, recordingID: r.id,
-                                    deviceResultJob: deviceResultJob)
+                                    deviceResultJob: deviceResultJob, groupID: r.groupID)
     }
 }
 
@@ -152,6 +160,8 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published var lastError: String?
     /// 방금 끝난 녹음 (완료 시트 표시용)
     @Published var finished: Recording?
+    /// 지금 녹음을 올릴 그룹 (녹음 중에도 바꿀 수 있음, nil = 설정의 ‘올릴 그룹’)
+    @Published var groupID: Int?
     @Published private(set) var interrupted = false
 
     private var recorder: AVAudioRecorder?
@@ -303,7 +313,9 @@ final class Recorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ko_KR")
         f.dateFormat = "M월 d일 HH:mm"
-        let rec = Recording(id: fileName, title: "회의 녹음 \(f.string(from: startedAt))", startedAt: startedAt, duration: dur)
+        var rec = Recording(id: fileName, title: "회의 녹음 \(f.string(from: startedAt))", startedAt: startedAt, duration: dur)
+        rec.groupID = groupID
+        groupID = nil
         RecordingStore.shared.add(rec)
         finished = rec
     }

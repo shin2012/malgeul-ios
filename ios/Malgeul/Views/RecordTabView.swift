@@ -49,6 +49,36 @@ struct RecordTabView: View {
 
 }
 
+/// 올릴 그룹 고르기 (녹음 중·완료 화면). 그룹이 둘 이상일 때만 보임
+struct RecordGroupMenu: View {
+    @Binding var groupID: Int?
+    @EnvironmentObject private var config: AppConfig
+    @EnvironmentObject private var store: MeetingStore
+
+    private var current: Int? { groupID ?? config.uploadGroup ?? store.groups.first(where: \.isDefault)?.id }
+
+    var body: some View {
+        if config.isConfigured && store.groups.count > 1 {
+            Menu {
+                Picker("그룹", selection: Binding(get: { current ?? 0 }, set: { groupID = $0 })) {
+                    ForEach(store.groups) { (g: MeetingGroup) in Text(g.name).tag(g.id) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder").font(.system(size: 14))
+                    Text(store.groups.first { $0.id == current }?.name ?? "그룹").font(.system(size: 15, weight: .medium))
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(Color.mgFg2)
+                .padding(.horizontal, 14).frame(minHeight: 40)
+                .background(Color.mgBg2, in: Capsule())
+                .contentShape(Capsule())
+            }
+            .accessibilityLabel("올릴 그룹")
+        }
+    }
+}
+
 struct RecorderPanel: View {
     @EnvironmentObject private var recorder: Recorder
     @State private var deletion = TwoTapDeletion()
@@ -68,6 +98,8 @@ struct RecorderPanel: View {
             Text(statusText)
                 .font(.subheadline)
                 .foregroundStyle(recorder.state == .recording ? Color.red : Color.secondary)
+
+            RecordGroupMenu(groupID: $recorder.groupID)
 
             HStack(spacing: 36) {
                 if recorder.isActive {
@@ -203,6 +235,8 @@ struct FinishRecordingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var transcribe = false
+    @State private var groupID: Int?
+    @EnvironmentObject private var store: MeetingStore
 
     var body: some View {
         NavigationStack {
@@ -216,6 +250,14 @@ struct FinishRecordingSheet: View {
                     if let p = recording.place { LabeledContent("장소", value: p) }
                     if recording.fromWatch == true { LabeledContent("녹음 기기", value: "애플워치") }
                     LabeledContent("크기", value: Fmt.size(recording.fileSize))
+                }
+                if config.isConfigured && store.groups.count > 1 {
+                    Section {
+                        Picker("그룹", selection: Binding(get: { groupID ?? config.uploadGroup ?? store.groups.first(where: \.isDefault)?.id ?? 0 },
+                                                         set: { groupID = $0 })) {
+                            ForEach(store.groups) { (g: MeetingGroup) in Text(g.name).tag(g.id) }
+                        }
+                    }
                 }
                 Section {
                     Toggle("업로드 후 바로 받아쓰기 (AssemblyAI)", isOn: $transcribe)
@@ -236,6 +278,7 @@ struct FinishRecordingSheet: View {
                         save()
                         var r = recording
                         r.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? recording.title : title
+                        r.groupID = groupID
                         recordings.upload(r, autoTranscribe: transcribe)
                         dismiss()
                         router.tab = .meetings
@@ -245,6 +288,7 @@ struct FinishRecordingSheet: View {
             }
             .onAppear {
                 title = recording.title
+                groupID = recording.groupID
                 transcribe = config.autoTranscribeRecordings
             }
         }
@@ -254,5 +298,6 @@ struct FinishRecordingSheet: View {
     private func save() {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !t.isEmpty && t != recording.title { recordings.rename(recording.id, title: t) }
+        if groupID != recording.groupID { recordings.setGroup(recording.id, groupID: groupID) }
     }
 }

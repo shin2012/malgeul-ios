@@ -291,12 +291,12 @@ enum UploadKit {
     }
 
     /// 조각 업로드 시작 요청 본문 (서버 POST /uploads)
-    static func initBody(filename: String, size: Int64, sha256: String?, recordedAt: Date?, autoTranscribe: Bool) -> [String: Any] {
+    static func initBody(filename: String, size: Int64, sha256: String?, recordedAt: Date?, autoTranscribe: Bool, groupID: Int? = nil) -> [String: Any] {
         var b: [String: Any] = ["filename": filename, "size": size]
         if let sha256 { b["sha256"] = sha256 }
         if let recordedAt { b["recorded_at"] = ISO8601DateFormatter().string(from: recordedAt) }
         if autoTranscribe { b["auto_transcribe"] = true }
-        if let g = SharedSettings.uploadGroup { b["group_id"] = g }
+        if let g = groupID ?? SharedSettings.uploadGroup { b["group_id"] = g }
         return b
     }
 

@@ -15,6 +15,8 @@ struct UploadJob: Codable, Identifiable, Equatable {
     var autoTranscribe = false
     var recordingID: String?
     var meetingID: Int?
+    /// 올릴 그룹 (nil = 설정의 ‘올릴 그룹’)
+    var groupID: Int?
     var removeSourceWhenDone = false
     /// 업로드가 끝나면 이 기기에서 받아쓰기 (설정 '받아쓰기 방식 = 이 기기')
     var deviceTranscribe: Bool?
@@ -129,7 +131,7 @@ final class UploadCenter: NSObject, ObservableObject {
     }
 
     func enqueue(file: URL, filename: String, recordedAt: Date? = nil, autoTranscribe: Bool = false,
-                 recordingID: String? = nil, removeSource: Bool = false, deviceResultJob: UUID? = nil) {
+                 recordingID: String? = nil, removeSource: Bool = false, deviceResultJob: UUID? = nil, groupID: Int? = nil) {
         let home = URL(fileURLWithPath: NSHomeDirectory()).standardizedFileURL.path
         var rel = file.standardizedFileURL.path
         if rel.hasPrefix(home) { rel = String(rel.dropFirst(home.count)) }
@@ -141,10 +143,11 @@ final class UploadCenter: NSObject, ObservableObject {
             dropSiblings(of: nil, recordingID: recordingID)
         }
         let device = autoTranscribe && AppConfig.shared.engine == .device && AppConfig.deviceTranscribeAvailable && deviceResultJob == nil
-        let job = UploadJob(sourceRelPath: rel, filename: filename, recordedAt: recordedAt,
+        var job = UploadJob(sourceRelPath: rel, filename: filename, recordedAt: recordedAt,
                             autoTranscribe: autoTranscribe && !device && deviceResultJob == nil,
                             recordingID: recordingID, removeSourceWhenDone: removeSource, deviceTranscribe: device ? true : nil,
                             deviceResultJob: deviceResultJob?.uuidString)
+        job.groupID = groupID
         jobs.insert(job, at: 0)
         save()
         start(job.id)
@@ -236,7 +239,7 @@ final class UploadCenter: NSObject, ObservableObject {
             // 3) 조각 업로드 시작 (서버가 조각 크기를 정함, 보통 50MB — 압축본은 대개 1조각)
             do {
                 let body = UploadKit.initBody(filename: fname, size: upSize, sha256: hash, recordedAt: job.recordedAt,
-                                              autoTranscribe: job.autoTranscribe)
+                                              autoTranscribe: job.autoTranscribe, groupID: job.groupID)
                 let d = try await API.shared.data("uploads", method: "POST", json: body)
                 let o = (try JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
                 if o["duplicate"] as? Bool == true {
