@@ -16,6 +16,12 @@ struct SettingsView: View {
                     Toggle("업로드가 끝난 녹음은 기기에서 지우기", isOn: $config.deleteAfterUpload)
                 }
 
+                Section {
+                    NavigationLink { DocSettingsView() } label: {
+                        Label("문서화", systemImage: "doc.richtext")
+                    }
+                } footer: { Text("즐겨찾기 양식·작성자·테마·글자 크기·워터마크·결재란·파일 형식·시각화") }
+
                 ProcessingSection()
                 UsageSection()
 

@@ -169,7 +169,7 @@ struct AccountSection: View {
                 Task { do { try await API.shared.deleteAccount(password: deletePw) } catch { self.error = error.localizedDescription } }
             }
         } message: {
-            Text("모든 녹음·대화·회의록이 서버에서 바로 지워지고 되돌릴 수 없습니다. 계속하려면 비밀번호를 입력하세요.")
+            Text("모든 녹음·대화·문서가 서버에서 바로 지워지고 되돌릴 수 없습니다. 계속하려면 비밀번호를 입력하세요.")
         }
     }
 }

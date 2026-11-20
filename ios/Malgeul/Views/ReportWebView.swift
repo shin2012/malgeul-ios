@@ -1,7 +1,7 @@
 import SwiftUI
 import WebKit
 
-/// 서버가 그리는 회의록 보기·편집 화면(report.html)을 그대로 띄움.
+/// 서버가 그리는 문서 보기·편집 화면(docs/ID.html)을 그대로 띄움.
 /// 페이지의 저장/되돌리기 요청에 앱 토큰을 붙이고, 인쇄·확인창은 iOS 기본 UI로 연결.
 @MainActor
 final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
@@ -18,7 +18,7 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
     private var origin = ""
     private var lastAuthReload = Date.distantPast
 
-    func make(meetingID: Int) -> WKWebView {
+    func make(meetingID: Int, path: String? = nil) -> WKWebView {
         if let webView { return webView }
         let token = AppConfig.shared.token.trimmingCharacters(in: .whitespacesAndNewlines)
         let tokenJS = (try? String(data: JSONSerialization.data(withJSONObject: [token]), encoding: .utf8)) ?? "[\"\"]"
@@ -84,7 +84,7 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
         wv.allowsBackForwardNavigationGestures = false
         wv.isInspectable = true
         webView = wv
-        if let req = try? API.shared.request("meetings/\(meetingID)/report.html") {
+        if let req = try? API.shared.request(path ?? "meetings/\(meetingID)/report.html") {
             origin = req.url.map { "\($0.scheme ?? "")://\($0.host ?? "")" } ?? ""
             wv.load(req)
         }
@@ -162,14 +162,14 @@ final class ReportWebController: NSObject, ObservableObject, WKNavigationDelegat
         let info = NSPrintInfo.shared
         info.jobDisposition = .spool
         let op = webView.printOperation(with: info)
-        op.jobTitle = (message.body as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "회의록"
+        op.jobTitle = (message.body as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "문서"
         op.showsPrintPanel = true
         op.showsProgressPanel = true
         if let w = webView.window { op.runModal(for: w, delegate: nil, didRun: nil, contextInfo: nil) } else { op.run() }
         #else
         let info = UIPrintInfo(dictionary: nil)
         info.outputType = .general
-        info.jobName = (message.body as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "회의록"
+        info.jobName = (message.body as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "문서"
         let pc = UIPrintInteractionController.shared
         pc.printInfo = info
         pc.printFormatter = webView.viewPrintFormatter()
@@ -237,28 +237,33 @@ final class WeakScriptHandler: NSObject, WKScriptMessageHandler {
 #if os(iOS)
 struct ReportWebContainer: UIViewRepresentable {
     let meetingID: Int
+    var path: String? = nil
     let controller: ReportWebController
-    func makeUIView(context: Context) -> WKWebView { controller.make(meetingID: meetingID) }
+    func makeUIView(context: Context) -> WKWebView { controller.make(meetingID: meetingID, path: path) }
     func updateUIView(_ v: WKWebView, context: Context) {}
 }
 #else
 struct ReportWebContainer: NSViewRepresentable {
     let meetingID: Int
+    var path: String? = nil
     let controller: ReportWebController
-    func makeNSView(context: Context) -> WKWebView { controller.make(meetingID: meetingID) }
+    func makeNSView(context: Context) -> WKWebView { controller.make(meetingID: meetingID, path: path) }
     func updateNSView(_ v: WKWebView, context: Context) {}
 }
 #endif
 
 struct ReportWebView: View {
     let meetingID: Int
+    /// 열 문서 주소 (없으면 예전 report.html). readOnly = 설정 예시처럼 저장 없는 보기
+    var path: String? = nil
+    var readOnly = false
     var onSaved: () -> Void
     @StateObject private var controller = ReportWebController()
     @Environment(\.dismiss) private var dismiss
     @State private var confirmLeave = false
 
     var body: some View {
-        ReportWebContainer(meetingID: meetingID, controller: controller)
+        ReportWebContainer(meetingID: meetingID, path: path, controller: controller)
             .ignoresSafeArea(edges: .bottom)
             .overlay {
                 if let e = controller.loadError {
@@ -287,10 +292,12 @@ struct ReportWebView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .barTrailing) {
-                    Button("저장") { controller.run("save()") }
-                        .fontWeight(controller.dirty ? .semibold : .regular)
-                        .disabled(controller.loadError != nil)
+                if !readOnly {
+                    ToolbarItem(placement: .barTrailing) {
+                        Button("저장") { controller.run("save()") }
+                            .fontWeight(controller.dirty ? .semibold : .regular)
+                            .disabled(controller.loadError != nil)
+                    }
                 }
                 ToolbarItem(placement: .barTrailing) {
                     Menu {
@@ -298,10 +305,12 @@ struct ReportWebView: View {
                         if controller.edited {
                             Button(role: .destructive) { controller.run("revert()") } label: { Label("자동 작성본으로", systemImage: "arrow.uturn.backward") }
                         }
-                        Section("문서 유형") {
-                            Picker("문서 유형", selection: Binding(get: { controller.docType }, set: { controller.run("type('\($0)')") })) {
-                                Text("회의록").tag("meeting")
-                                Text("출장복명서").tag("trip")
+                        if ["meeting", "trip"].contains(controller.docType) && !readOnly {
+                            Section("문서 유형") {
+                                Picker("문서 유형", selection: Binding(get: { controller.docType }, set: { controller.run("type('\($0)')") })) {
+                                    Text("회의록").tag("meeting")
+                                    Text("출장복명서").tag("trip")
+                                }
                             }
                         }
                         Section {

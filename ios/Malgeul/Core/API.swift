@@ -326,6 +326,46 @@ final class API {
         try await data("meetings/\(id)/speaker-id", method: "POST")
     }
 
+    // MARK: 문서화 (녹음당 여러 문서)
+
+    func docs(_ id: Int) async throws -> [DocItem] {
+        try decode([DocItem].self, try await data("meetings/\(id)/docs"))
+    }
+    /// 새 문서(template: 양식 key | recommend) 또는 같은 문서 다시 작성(docID)
+    @discardableResult
+    func createDoc(_ id: Int, template: String?, docID: Int? = nil) async throws -> Int? {
+        var body: [String: Any] = [:]
+        if let template { body["template"] = template }
+        if let docID { body["docId"] = docID }
+        let d = try await data("meetings/\(id)/docs", method: "POST", json: body)
+        return (try? JSONSerialization.jsonObject(with: d) as? [String: Any])?["id"] as? Int
+    }
+    func deleteDoc(_ id: Int, docID: Int) async throws { try await data("meetings/\(id)/docs/\(docID)", method: "DELETE") }
+    func docConfig() async throws -> DocConfig { try decode(DocConfig.self, try await data("doc/types")) }
+    func docSettings() async throws -> DocSettings { try JSONDecoder().decode(DocSettings.self, from: try await data("doc/settings")) }
+    @discardableResult
+    func saveDocSettings(_ s: DocSettings) async throws -> DocSettings {
+        let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any] ?? [:]
+        return try JSONDecoder().decode(DocSettings.self, from: try await data("doc/settings", method: "PUT", json: body))
+    }
+    func uploadDocImage(kind: String, dataURL: String) async throws { try await data("doc/settings/image/\(kind)", method: "PUT", json: ["dataUrl": dataURL]) }
+    func deleteDocImage(kind: String) async throws { try await data("doc/settings/image/\(kind)", method: "DELETE") }
+
+    /// 문서 파일(pdf·docx·hwpx·html)을 내려받아 서버가 붙인 파일 이름으로 임시 폴더에 저장
+    func downloadDoc(_ id: Int, docID: Int, ext: String) async throws -> URL {
+        let r = try request("meetings/\(id)/docs/\(docID).\(ext)?download=1")
+        let (d, resp) = try await session.data(for: r)
+        try Self.check(resp, d)
+        var name = (resp as? HTTPURLResponse).flatMap { Self.filename(from: $0) } ?? "document.\(ext)"
+        name = name.replacingOccurrences(of: "/", with: "_")
+        let dir = FileManager.default.temporaryDirectory.appending(path: "docs/\(docID)", directoryHint: .isDirectory)
+        try? FileManager.default.removeItem(at: dir)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let out = dir.appending(path: name)
+        try d.write(to: out)
+        return out
+    }
+
     /// report.pdf / report.html?download=1 을 내려받아 서버가 붙인 파일 이름으로 임시 폴더에 저장
     func downloadReport(_ id: Int, pdf: Bool) async throws -> URL {
         let r = try request(pdf ? "meetings/\(id)/report.pdf?download=1" : "meetings/\(id)/report.html?download=1")

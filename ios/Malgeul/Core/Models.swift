@@ -181,7 +181,7 @@ struct MeetingDetail: Decodable {
     }
 }
 
-// MARK: - 문서(회의록/출장복명서)
+// MARK: - 문서(예전 /report — 가장 최근 문서 하나)
 
 struct ReportInfo: Decodable, Equatable {
     var type: String?
@@ -214,6 +214,83 @@ struct ReportPreview: Decodable, Equatable {
     struct Section: Decodable, Equatable { var title: String; var items: [Item]; var callout: Callout? }
     var purpose: String?
     var sections: [Section]
+}
+
+// MARK: - 문서화 (녹음당 여러 문서)
+
+struct DocItem: Decodable, Identifiable, Equatable {
+    var id: Int
+    var type: String
+    var typeName: String
+    var requested: String
+    var subject: String?
+    var status: String
+    var phase: String?
+    var errorMessage: String?
+    var updatedAt: String?
+    var editedAt: String?
+    var preview: ReportPreview?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        id = c.int("id") ?? 0
+        type = c.str("type") ?? "meeting"
+        typeName = c.str("type_name") ?? "문서"
+        requested = c.str("requested") ?? type
+        subject = c.str("subject")
+        status = c.str("status") ?? "processing"
+        phase = c.str("phase")
+        errorMessage = c.str("error_message")
+        updatedAt = c.str("updated_at")
+        editedAt = c.str("edited_at")
+        preview = try? c.decodeIfPresent(ReportPreview.self, forKey: AnyKey("preview"))
+    }
+}
+
+struct DocTypeInfo: Decodable, Identifiable, Hashable {
+    var key: String
+    var name: String
+    var desc: String
+    var sections: [String]
+    var id: String { key }
+}
+struct DocConfig: Decodable {
+    struct Named: Decodable, Hashable { var key: String; var name: String; var accent: String? }
+    var types: [DocTypeInfo]
+    var viz: [Named]
+    var themes: [Named]
+}
+
+/// 문서화 설정 (서버 /doc/settings 와 같은 키)
+struct DocSettings: Codable, Equatable {
+    struct Approval: Codable, Equatable { var on: Bool; var cells: [String] }
+    var favorites: [String] = ["meeting", "trip"]
+    var org = "", dept = "", rank = "", name = ""
+    var theme = "navy", fontSize = "md", format = "pdf"
+    var conf = true, watermark = false
+    var wmOpacity = 100
+    var length = "normal", style = "gaejo"
+    var approval = Approval(on: false, cells: ["담당", "부장", "처장"])
+    var filename = "({양식}) {YYMMDD}_{부서}_{건명}"
+    var viz = "auto"
+    var vizAllowed: [String] = []
+    var autoDoc = false
+    var hasWmImage: Bool? = nil
+    var hasLogoImage: Bool? = nil
+
+    init() {}
+    // 서버가 키를 빼먹어도 기본값으로 (예전 서버·시험 서버 호환)
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        func v<T: Decodable>(_ k: String, _ d: T) -> T { (try? c.decodeIfPresent(T.self, forKey: AnyKey(k))) ?? d }
+        favorites = v("favorites", favorites); org = v("org", org); dept = v("dept", dept); rank = v("rank", rank); name = v("name", name)
+        theme = v("theme", theme); fontSize = v("fontSize", fontSize); format = v("format", format)
+        conf = v("conf", conf); watermark = v("watermark", watermark); wmOpacity = v("wmOpacity", wmOpacity)
+        length = v("length", length); style = v("style", style); approval = v("approval", approval)
+        filename = v("filename", filename); viz = v("viz", viz); vizAllowed = v("vizAllowed", vizAllowed); autoDoc = v("autoDoc", autoDoc)
+        hasWmImage = try? c.decodeIfPresent(Bool.self, forKey: AnyKey("hasWmImage"))
+        hasLogoImage = try? c.decodeIfPresent(Bool.self, forKey: AnyKey("hasLogoImage"))
+    }
 }
 
 // MARK: - 화자 자동 식별

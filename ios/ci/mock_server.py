@@ -64,6 +64,21 @@ CHAT = {"history": [
     {"role": "assistant", "text": "## 주요 결정사항\n\n1. **기본 화면**은 첫 번째 시안(검색창 + 카드)으로 결정\n2. 설정에서 **목록형**으로 바꿀 수 있게 함\n3. 카드 수: 휴대폰 3장, 태블릿 6장\n\n| 할 일 | 담당 | 기한 |\n|---|---|---|\n| 최종 시안 공유 | 박민수 | 수요일 오전 |\n| 개발 착수 | 개발팀 | 금요일 |\n\n> 다음 회의에서 시안 반응을 다시 확인하기로 했습니다."},
 ]}
 
+# 문서화(녹음당 여러 문서) — 서버 /docs·/doc/types·/doc/settings 와 같은 모양
+DOCS = [dict(REPORT, id=1, type="meeting", type_name="회의록", requested="meeting", phase=None),
+         {"id": 2, "meeting_id": 5, "type": "todo", "type_name": "할일표", "requested": "recommend", "subject": "개발 착수 준비 할 일",
+          "status": "done", "updated_at": REPORT.get("updated_at"), "edited_at": None, "preview": None}]
+DOC_TYPES = {"types": [{"key": k, "name": n, "desc": d, "sections": ["개요", "주요 내용"], "viz": []} for k, n, d in [
+    ("meeting", "회의록", "회의·간담회·사내 협의"), ("trip", "출장복명서", "외부 방문·현장 점검·박람회"), ("consult", "협의결과", "업체·타 부서와 통화·대면 협의"),
+    ("visit", "업체미팅", "업체 방문·접견"), ("complaint", "민원처리", "고객 전화·민원 응대"), ("todo", "할일표", "녹음에서 할 일만 뽑은 한 장"),
+    ("weekly", "업무보고", "주간·월간 실적 보고"), ("order", "지시이행", "구두 지시 → 이행 계획"), ("review", "검토의견", "제안·설명 청취 후 검토"),
+    ("edu", "교육결과", "교육·세미나 참석"), ("interview", "면담기록", "인터뷰·면담·의견 청취")]],
+    "viz": [{"key": "flow", "name": "절차도"}, {"key": "gantt", "name": "간트차트"}, {"key": "kpi", "name": "핵심 수치"}],
+    "themes": [{"key": "navy", "name": "남색 (기본)", "accent": "#1f4e8c"}, {"key": "teal", "name": "청록", "accent": "#0e6b6b"}]}
+DOC_SETTINGS = {"favorites": ["meeting", "trip"], "org": "예시 기관", "dept": "예시 부서", "rank": "", "name": "예시 사용자",
+    "theme": "navy", "fontSize": "md", "format": "pdf", "conf": True, "watermark": False, "wmOpacity": 100, "length": "normal", "style": "gaejo",
+    "approval": {"on": False, "cells": ["담당", "부장", "처장"]}, "filename": "({양식}) {YYMMDD}_{부서}_{건명}", "viz": "auto",
+    "vizAllowed": ["flow", "gantt", "kpi"], "autoDoc": False, "hasWmImage": False, "hasLogoImage": False}
 REPORT_HTML = """<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>(회의록) 261107_예시</title><style>body{font-family:-apple-system;margin:0;background:#eee}.bar{position:sticky;top:0;background:#222;color:#fff;padding:10px;display:flex;gap:8px}
 .bar button{border:0;border-radius:6px;padding:6px 10px}.doc{background:#fff;margin:16px auto;max-width:720px;padding:32px;min-height:900px}
@@ -106,10 +121,15 @@ class H(BaseHTTPRequestHandler):
         if parts == ["groups"]: return self.send(200, GROUPS)
         if parts[0] == "uploads": return self.uploads(parts[1:])
         if parts == ["util", "exchange-rate"]: return self.send(200, {"rate": 1380.5})
+        if parts == ["doc", "types"]: return self.send(200, DOC_TYPES)
+        if parts == ["doc", "settings"]: return self.send(200, DOC_SETTINGS)
+        if parts == ["doc", "preview"]: return self.send(200, REPORT_HTML.encode(), "text/html; charset=utf-8")
         if parts[0] == "meetings" and len(parts) >= 2 and parts[1].isdigit():
             mid = int(parts[1]); rest = parts[2:]
             if not rest: return self.send(200, detail(mid))
             if rest == ["report"]: return self.send(200, REPORT)
+            if rest == ["docs"]: return self.send(200, DOCS)
+            if len(rest) == 2 and rest[0] == "docs" and rest[1].endswith(".html"): return self.send(200, REPORT_HTML.encode(), "text/html; charset=utf-8")
             if rest == ["speaker-id"]: return self.send(200, SPEAKER)
             if rest == ["report.html"]: return self.send(200, REPORT_HTML.encode(), "text/html; charset=utf-8")
             if rest == ["audio"]: return self.send(200, tone_wav(), "audio/wav")

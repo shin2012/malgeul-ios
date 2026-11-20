@@ -5,7 +5,7 @@ enum SidePane: String { case doc, chat }
 
 /// 회의 상세 — 웹 상세 화면과 같은 구성
 /// 머리: 큰 제목 · 녹음 시각 · 길이 · 참석자 · #태그
-/// 넓은 화면(900pt 이상): 대화 | 오른쪽 패널(회의록 · AI 질문). 좁으면 대화 · 회의록 · AI 질문 탭
+/// 넓은 화면(900pt 이상): 대화 | 오른쪽 패널(문서화 · AI 질문). 좁으면 대화 · 문서화 · AI 질문 탭
 /// 아래: 플레이어 (재생 중 문장 강조 · 따라가기)
 struct MeetingDetailView: View {
     let meetingID: Int
@@ -77,8 +77,8 @@ struct MeetingDetailView: View {
                             scriptPane
                             Rectangle().fill(Color.mgLine).frame(width: 1)
                             VStack(spacing: 0) {
-                                WebSegmented(selection: $side, options: [(.doc, "회의록"), (.chat, "AI 질문")],
-                                             badge: doc.report?.status == "processing" ? .doc : nil)
+                                WebSegmented(selection: $side, options: [(.doc, "문서화"), (.chat, "AI 질문")],
+                                             badge: doc.writing ? .doc : nil)
                                     .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 6)
                                 if side == .doc { DocPanelView(meetingID: meetingID, doc: doc) }
                                 else { ChatView(meetingID: meetingID, compact: true) }
@@ -86,8 +86,8 @@ struct MeetingDetailView: View {
                             .frame(width: min(440, geo.size.width * 0.4))
                         }
                     } else {
-                        WebSegmented(selection: $tab, options: [(.script, "대화"), (.doc, "회의록"), (.chat, "AI 질문")],
-                                     badge: doc.report?.status == "processing" ? .doc : nil)
+                        WebSegmented(selection: $tab, options: [(.script, "대화"), (.doc, "문서화"), (.chat, "AI 질문")],
+                                     badge: doc.writing ? .doc : nil)
                             .padding(.horizontal, 12).padding(.vertical, 8)
                         Rectangle().fill(Color.mgLine).frame(height: 1)
                         Group {

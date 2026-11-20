@@ -16,7 +16,7 @@ struct MeetingsSplitView: View {
                     MeetingDetailView(meetingID: id).id(id)
                 } else {
                     ContentUnavailableView("노트를 고르세요", systemImage: "text.bubble",
-                                           description: Text("받아쓰기가 끝난 노트를 누르면 대화·회의록·AI 질문이 열립니다."))
+                                           description: Text("받아쓰기가 끝난 노트를 누르면 대화·문서화·AI 질문이 열립니다."))
                 }
             }
         }
